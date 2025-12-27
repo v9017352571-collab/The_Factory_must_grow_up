@@ -1,6 +1,5 @@
 import arcade
 from arcade.gui import UIManager, UIDropdown, UIFlatButton
-from arcade.camera import Camera2D
 from typing import Optional, Dict, List, Tuple, Any, Union
 import random
 
@@ -989,8 +988,8 @@ class MyGame(arcade.Window):
         self.setup_ui()
 
         # Камеры
-        self.world_camera = Camera2D()
-        self.gui_camera = Camera2D()
+        self.world_camera = arcade.Camera2D()
+        self.gui_camera = arcade.Camera2D()
         self.world_camera.viewport = (0, 0, width, height)
         self.gui_camera.viewport = (0, 0, width, height)
 
