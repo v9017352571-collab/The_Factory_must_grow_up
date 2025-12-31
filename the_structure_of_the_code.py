@@ -1,3 +1,5 @@
+import math
+
 import arcade
 from arcade.gui import UIManager, UIDropdown, UIFlatButton
 from typing import Optional, Dict, List, Tuple, Any, Union
@@ -8,6 +10,7 @@ class ResourceCost:
     """Класс для представления стоимости построек в ресурсах"""
 
     def __init__(self, cost_list: List[List[Union[int, str]]]):
+
         """
         Инициализация стоимости здания
 
@@ -111,6 +114,7 @@ class Building(arcade.Sprite):
 
     def consume_resource(self, resource_type: str, amount: int = 1) -> bool:
         pass
+
         # Потребляет ресурс для производства
         # Возвращает True если успешно потребил, False если недостаточно
         # Уменьшает количество ресурса на amount
@@ -759,7 +763,8 @@ class Bullet(arcade.Sprite):
 
 class Bug(arcade.Sprite):
     def __init__(self, filename: str, scale: float, hp: int, damage: int, speed: float,
-                 is_ranged: bool, name: str = "Жук"):
+                 is_ranged: bool, attack_range: float, attack_cooldown: float,
+                 name: str = "Жук", bullet_texture: str = None):
         """
         Базовый класс для врагов
 
@@ -770,14 +775,20 @@ class Bug(arcade.Sprite):
         damage: int - урон по целям
         speed: float - скорость в блоках в секунду
         is_ranged: bool - является ли дальнобойным
+        attack_range: float - дальность атаки в пикселях
+        attack_cooldown: float - время между атаками в секундах
         name: str = "Жук" - название для отладки
+        bullet_texture: str = None - текстура пули для дальнобойных жуков
 
         Атрибуты:
         self.speed_pixels: float - скорость в пикселях в секунду (блок = 16 пикселей)
         self.is_ranged: bool - флаг дальнобойной атаки
         self.bullet_list: arcade.SpriteList - список пуль
         self.target: Any = None - текущая цель
-        self.attack_cooldown: float = 0.0 - таймер атаки в секундах
+        self.attack_cooldown_timer: float = 0.0 - таймер атаки в секундах
+        self.attack_range: float - дальность атаки
+        self.max_attack_cooldown: float - время перезарядки
+        self.bullet_texture: str - текстура пули
         """
         super().__init__(filename, scale)
         self.hp = hp
@@ -789,18 +800,138 @@ class Bug(arcade.Sprite):
         self.name = name
         self.bullet_list = arcade.SpriteList()
         self.target = None
-        self.attack_cooldown = 0.0
+        self.attack_cooldown_timer = 0.0
+        self.attack_range = attack_range
+        self.max_attack_cooldown = attack_cooldown
+        self.bullet_texture = bullet_texture
+        self.path = []  # Список точек пути
+        self.current_path_index = 0
+        self.waypoints = []  # Контрольные точки пути
+
+    def set_path(self, path: List[Tuple[float, float]]):
+        """Установка пути для следования"""
+        self.path = path
+        self.current_path_index = 0
+        if self.path:
+            self.center_x, self.center_y = self.path[0]
+
+    def set_waypoints(self, waypoints: List[Tuple[float, float]]):
+        """Установка контрольных точек"""
+        self.waypoints = waypoints
 
     def update(self, delta_time: float):
-        pass
-        # Обновление состояния жука с учетом delta_time
+        """
+        Обновление состояния жука с учетом delta_time
+
+        Логика:
+        1. Двигаемся по пути к следующей точке
+        2. Если есть цель в радиусе атаки - атакуем
+        3. Обновляем пули
+        4. Обновляем таймер атаки
+        """
+        # Обновляем таймер атаки
+        if self.attack_cooldown_timer > 0:
+            self.attack_cooldown_timer -= delta_time
+
+        # Движение по пути
+        if self.path and self.current_path_index < len(self.path):
+            target_x, target_y = self.path[self.current_path_index]
+
+            # Вычисляем направление
+            dx = target_x - self.center_x
+            dy = target_y - self.center_y
+            distance = math.sqrt(dx * dx + dy * dy)
+
+            if distance > 1:  # Если не достигли точки
+                # Нормализуем вектор направления
+                if distance > 0:
+                    dx /= distance
+                    dy /= distance
+
+                # Двигаемся с заданной скоростью
+                self.center_x += dx * self.speed_pixels * delta_time
+                self.center_y += dy * self.speed_pixels * delta_time
+
+                # Обновляем угол поворота
+                if dx != 0 or dy != 0:
+                    self.angle = math.degrees(math.atan2(-dx, dy))  # Для вида сверху
+            else:
+                # Достигли текущей точки, переходим к следующей
+                self.current_path_index += 1
+
+        # Обновляем пули
+        self.bullet_list.update()
+
+        # Проверяем наличие цели
+        if not self.target or not hasattr(self.target, 'hp') or self.target.hp <= 0:
+            self.find_target()
+
+        # Если есть цель и можем атаковать - атакуем
+        if self.target and self.attack_cooldown_timer <= 0:
+            self.attack_target()
+
+    def find_target(self):
+        """
+        Поиск цели для атаки
+
+        Логика приоритета:
+        1. Ядро
+        2. Ближайшая турель
+        3. Ближайшее здание
+        4. Игрок
+        """
+        # Этот метод должен быть реализован в основном классе игры
+        # Здесь просто сбрасываем цель
+        self.target = None
 
     def attack_target(self):
-        pass
-        # Атака цели
-        # Мгновенно наносит урон
-        # Для ranged создает пулю вместо прямого урона
-        # Сбрасывает attack_cooldown = 0 (мгновенно по ТЗ)
+        """
+        Атака цели
+
+        Для ближников: мгновенно наносит урон при касании
+        Для дальнобойных: создает пулю
+        """
+        if not self.target:
+            return
+
+        # Проверяем дистанцию
+        dx = self.target.center_x - self.center_x
+        dy = self.target.center_y - self.center_y
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        if distance <= self.attack_range:
+            if self.is_ranged:
+                # Создаем пулю
+                if self.bullet_texture:
+                    bullet = Bullet(
+                        self.bullet_texture,
+                        0.25,  # Масштаб для пули
+                        self.damage,
+                        2.0,  # Время жизни пули
+                        self,
+                        self.target
+                    )
+                    bullet.center_x = self.center_x
+                    bullet.center_y = self.center_y
+                    self.bullet_list.append(bullet)
+            else:
+                # Ближняя атака
+                if hasattr(self.target, 'take_damage'):
+                    self.target.take_damage(self.damage)
+
+            # Сбрасываем таймер атаки
+            self.attack_cooldown_timer = self.max_attack_cooldown
+
+    def take_damage(self, amount: int):
+        """Получение урона"""
+        self.hp -= amount
+        if self.hp <= 0:
+            self.on_death()
+
+    def on_death(self):
+        """Смерть жука"""
+        self.remove_from_sprite_lists()
+        # Здесь можно добавить эффекты смерти, выпадение ресурсов и т.д.
 
 
 class Beetle(Bug):
