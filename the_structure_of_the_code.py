@@ -934,7 +934,7 @@ class Bug(arcade.Sprite):
         # Здесь можно добавить эффекты смерти, выпадение ресурсов и т.д.
 
 
-class Beetle(Bug):
+class Beetle(arcade.Sprite):
     def __init__(self, filename: str, scale: float):
         """
         Обычный жук: низкий урон, низкий хп, высокая скорость, ближник
@@ -950,8 +950,112 @@ class Beetle(Bug):
         is_ranged: False
         name: "Обычный жук"
         """
-        super().__init__(filename, scale, hp=1, damage=1, speed=3.0,
-                         is_ranged=False, name="Обычный жук")
+        super().__init__(filename, scale)
+
+        # Характеристики по ТЗ
+        self.hp = 1
+        self.max_hp = 1
+        self.damage = 1
+        self.speed = 3.0  # блоков в секунду
+        self.is_ranged = False
+        self.name = "Обычный жук"
+
+        # Состояние
+        self.is_alive = True
+
+        # Путь следования (будет установлен извне)
+        self.path = []  # список точек [(x1, y1), (x2, y2), ...]
+        self.current_waypoint = 0  # текущая точка пути
+
+    def update(self, delta_time: float, core: 'Core' = None):
+        """Обновление состояния жука"""
+        if not self.is_alive:
+            return
+
+        # 1. Проверяем, достигли ли ядра
+        if core and self.check_core_collision(core):
+            self.attack_core(core)
+            return
+
+        # 2. Двигаемся по пути
+        self.follow_path(delta_time)
+
+    def set_path(self, path_points):
+        """Устанавливает путь для следования"""
+        self.path = path_points
+        self.current_waypoint = 0
+
+        # Если есть путь, ставим на первую точку
+        if self.path:
+            self.center_x = self.path[0][0]
+            self.center_y = self.path[0][1]
+
+    def follow_path(self, delta_time):
+        """Следование по пути"""
+        if not self.path or self.current_waypoint >= len(self.path):
+            return
+
+        # Текущая цель
+        target_x, target_y = self.path[self.current_waypoint]
+
+        # Вычисляем направление
+        dx = target_x - self.center_x
+        dy = target_y - self.center_y
+        distance = math.sqrt(dx * dx + dy * dy)
+
+        # Если достигли точки
+        if distance < 5:
+            self.current_waypoint += 1
+            return
+
+        # Двигаемся к цели
+        if distance > 0:
+            # Нормализуем вектор направления
+            dx /= distance
+            dy /= distance
+
+            # Переводим скорость в пиксели (1 блок = 16 пикселей)
+            speed_pixels = self.speed * 16.0 * delta_time
+
+            # Обновляем позицию
+            self.center_x += dx * speed_pixels
+            self.center_y += dy * speed_pixels
+
+    def check_core_collision(self, core: 'Core') -> bool:
+        """Проверяет столкновение с ядром"""
+        if not core:
+            return False
+
+        # Простая проверка расстояния (ядро 2x2 блока = 32x32 пикселя)
+        distance = math.sqrt(
+            (self.center_x - core.center_x) ** 2 +
+            (self.center_y - core.center_y) ** 2
+        )
+
+        # Если расстояние меньше суммы радиусов (примерно 32 пикселя)
+        return distance < 32
+
+    def attack_core(self, core: 'Core'):
+        """Атакует ядро и уничтожается"""
+        if hasattr(core, 'take_damage'):
+            core.take_damage(self.damage)
+        self.die()
+
+    def take_damage(self, amount: int):
+        """Получает урон"""
+        self.hp -= amount
+        if self.hp <= 0:
+            self.die()
+
+    def die(self):
+        """Уничтожает жука"""
+        self.is_alive = False
+        # В реальной игре нужно удалить спрайт из списков
+        # self.remove_from_sprite_lists()
+
+    def can_attack(self) -> bool:
+        """Проверяет, может ли атаковать (для ближника всегда True)"""
+        return not self.is_ranged and self.is_alive
 
 
 class ArmoredBeetle(Bug):
