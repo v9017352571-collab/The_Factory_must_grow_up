@@ -203,18 +203,19 @@ class Core(arcade.Sprite):
         """Добавляет ресурс в ядро
         Ядро имеет бесконечное хранилище
         Просто увеличивает счетчик ресурса"""
-        pass
+        self.resources[resource_type] += amount
 
     def get_resource_count(self, resource_type: str) -> int:
         """Получает количество ресурса в ядре
         Возвращает количество ресурса (0 если нет такого ресурса)"""
-        pass
+        return self.resources.get(resource_type, 0)
 
     def take_damage(self, amount: int):
         """Наносит урон ядру,
         Уменьшает HP на amount,
         Если HP <= 0 - ядро уничтожено"""
-        pass
+        self.hp -= amount
+        # логика при уничтоженном ядре пишется в MyGame
 
 
 class MineDrill(Building):
