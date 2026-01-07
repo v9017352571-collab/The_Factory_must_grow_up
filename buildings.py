@@ -302,52 +302,6 @@ class MineDrill(Building):
         """
 
 
-class CoalDrill(MineDrill):
-    """Угольный бур - потребляет уголь, медленно добывает"""
-
-    def __init__(self, filename: str, scale: float, x: float, y: float, cell_resource: str):
-        """
-        Инициализация угольного бура
-
-        Параметры:
-        filename: str - путь к изображению
-        scale: float - масштаб
-        x: float - позиция X центра
-        y: float - позиция Y центра
-        cell_resource: str - ресурс клетки для добычи
-
-        Атрибуты:
-        self.hp: int = 5 - здоровье из констант
-        self.max_hp: int = 5 - максимальное здоровье
-        self.production_time: float = 3.0 - время добычи
-        self.fuel_required: bool = True - требует уголь для работы
-        self.output_resource: str = cell_resource - что производит
-        """
-        cost = ResourceCost([[2, 'Медь'], [1, 'Камень']])
-        super().__init__(filename, scale, x, y,
-                         drill_type="угольный",
-                         cell_resource=cell_resource,
-                         cost=cost,
-                         name="Угольный бур",
-                         fuel_required=True)
-
-        self.hp = BUILDING_HP["Угольный бур"]
-        self.max_hp = self.hp
-
-    def produce_resource(self):
-        pass
-        """
-        Добывает ресурс с клетки для угольного бура
-
-        Логика:
-        - Проверяет наличие угля во внутреннем хранилище
-        - Если есть уголь - потребляет 1 уголь
-        - Добывает ресурс cell_resource (любой кроме железной руды)
-        - Если нет места для ресурса - ресурс теряется
-        - Если нет угля - ничего не производит
-        """
-
-
 class ElectricDrill(MineDrill):
     """Электрический бур - быстро добывает, ничего не потребляет"""
 
