@@ -1,4 +1,3 @@
-# buildings.py
 import arcade
 from typing import Dict, List, Optional, Any, Deque
 from collections import deque
@@ -72,7 +71,6 @@ class Building(arcade.Sprite):
             self.resource_capacity = {}
 
     def take_damage(self, amount: int):
-        pass
         """
         Наносит урон зданию
 
@@ -86,9 +84,12 @@ class Building(arcade.Sprite):
         - Все дроны в очередях получают уведомление о разрушении
         - Не позволяет HP быть меньше 0
         """
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            self.resources = {}
 
     def can_accept(self, resource_type: str) -> bool:
-        pass
         """
         Проверяет, может ли здание принять ресурс
 
@@ -104,9 +105,11 @@ class Building(arcade.Sprite):
         - Если здание уже заполнено этим ресурсом - не может принять
         - Для производственных зданий - не может принять свой выходной ресурс
         """
+        if self.infinite_storage or self.resources.get(resource_type, 0) < self.resource_capacity.get(resource_type, 0):
+            return True
+        return False
 
     def accept_resource(self, resource_type: str) -> bool:
-        pass
         """
         Принимает ресурс в здание
 
@@ -121,9 +124,12 @@ class Building(arcade.Sprite):
         - Увеличивает счетчик ресурса
         - Если есть дроны в waiting_for_unload - пробует отдать им ресурсы
         """
+        if self.can_accept(resource_type):
+            self.resources[resource_type] += 1
+            return True
+        return False
 
     def has_resource(self, resource_type: str) -> bool:
-        pass
         """
         Проверяет наличие ресурса в здании
 
@@ -133,9 +139,9 @@ class Building(arcade.Sprite):
         Возвращает:
         bool - True если есть хотя бы один ресурс, False если нет
         """
+        return self.resources.get(resource_type, 0) > 0
 
     def consume_resource(self, resource_type: str, amount: int = 1) -> bool:
-        pass
         """
         Потребляет ресурс из здания
 
@@ -151,9 +157,12 @@ class Building(arcade.Sprite):
         - Уменьшает количество на amount
         - Если ресурса не хватает - возвращает False
         """
+        if self.resources.get(resource_type, 0) >= amount:
+            self.resources[resource_type] -= amount
+            return True
+        return False
 
     def add_drone_to_queue(self, drone: 'Drone'):
-        pass
         """
         Добавляет дрона в очередь ожидания ресурсов
 
@@ -164,9 +173,9 @@ class Building(arcade.Sprite):
         - Добавляет дрона в waiting_drones
         - Дрон будет ждать в очереди, пока не получит ресурс
         """
+        self.waiting_drones.append(drone)
 
     def add_drone_for_unload(self, drone: 'Drone'):
-        pass
         """
         Добавляет дрона в очередь ожидания разгрузки
 
@@ -177,9 +186,9 @@ class Building(arcade.Sprite):
         - Добавляет дрона в waiting_for_unload
         - Дрон будет ждать в очереди, пока не сможет отдать ресурс
         """
+        self.waiting_for_unload.append(drone)
 
     def process_queues(self, delta_time: float):
-        pass
         """
         Обрабатывает очереди дронов
 
@@ -197,6 +206,9 @@ class Building(arcade.Sprite):
           * Если операция успешна - удаляет дрона из очереди
           * Если неуспешна - дрон остается в очереди
         """
+        for drone in self.waiting_for_unload:
+            pass
+        # TODO: закончить обработку дронов
 
     def can_give_resource(self) -> bool:
         pass
@@ -211,6 +223,13 @@ class Building(arcade.Sprite):
         - Для буров: проверяет наличие добытого ресурса
         - Для ядра: всегда True (бесконечное хранилище)
         """
+        if self.resources.get(self.output_resource, 0) > 0 or self.name == "Ядро":
+            return True
+        return False
+
+    def calculate_distance(self, drone: 'Drone') -> int:
+        x, y = drone.center_x, drone.center_y
+        return int(((self.center_x - x) * 2 + (self.center_y - y) * 2) ** 0.5)
 
 
 class MineDrill(Building):
@@ -254,12 +273,14 @@ class MineDrill(Building):
         self.fuel_required = fuel_required
         self.output_resource = cell_resource  # Бур производит ресурс клетки
 
+        # предлагаю немного поменять логику и сделать ее через флаги добычи
+        self.in_mining = False
+
         # Время добычи зависит от типа бура
         self.production_time = 3.0 if drill_type == "угольный" else 1.0
         self.production_timer = 0.0
 
     def update(self, delta_time: float):
-        pass
         """
         Обновление состояния бура
 
@@ -274,9 +295,27 @@ class MineDrill(Building):
         - Сбрасывает таймер
         - Обрабатывает очереди дронов
         """
+        if self.in_mining or not self.fuel_required:
+            self.production_timer += delta_time
+        else:
+            self.try_start_mining()
+        if self.production_timer >= self.production_time:
+            self.in_mining = False
+            self.production_timer = 0.0
+            self.resources[self.output_resource] += 1
+
+        # TODO: добавить обработку дронов
+
+    def try_start_mining(self):
+        """
+        пытается запустить производство
+        если есть уголь - сжигаем его и меняем флаг производства
+        """
+        if self.resources.get("Уголь", 0) > 0:
+            self.in_mining = True
+            self.resources["Уголь"] -= 1
 
     def produce_resource(self):
-        pass
         """
         Добывает ресурс с клетки
 
@@ -287,9 +326,10 @@ class MineDrill(Building):
         - Если нет места - ресурс не добывается (теряется)
         - После производства вызывает can_give_resource() для проверки
         """
+        pass
+        # пока не понимаю зачем, так как это сделано в update, потом доработаю
 
     def can_give_resource(self) -> bool:
-        pass
         """
         Проверяет, может ли бур отдать ресурс
 
@@ -300,6 +340,7 @@ class MineDrill(Building):
         - Проверяет наличие cell_resource в ресурсах
         - Возвращает True если количество > 0
         """
+        return self.resources.get(self.cell_resource, 0) > 0
 
 
 class ElectricDrill(MineDrill):
@@ -335,7 +376,6 @@ class ElectricDrill(MineDrill):
         self.max_hp = self.hp
 
     def produce_resource(self):
-        pass
         """
         Добывает ресурс с клетки для электрического бура
 
@@ -345,6 +385,7 @@ class ElectricDrill(MineDrill):
         - Если нет места для ресурса - ресурс теряется
         - Работает независимо от наличия других ресурсов
         """
+        pass # в update MineDrill это сделано, если я не прав потом доделаю
 
 
 class ProductionBuilding(Building):
@@ -390,8 +431,9 @@ class ProductionBuilding(Building):
         self.production_timer = 0.0
         self.can_produce = False
 
+        self.in_processing = False
+
     def update(self, delta_time: float):
-        pass
         """
         Обновление состояния производства
 
@@ -405,9 +447,19 @@ class ProductionBuilding(Building):
         - Сбрасывает таймер после производства
         - Обрабатывает очереди дронов
         """
+        if self.in_processing:
+            self.production_timer += delta_time
+        else:
+            self.has_all_inputs()
+        if self.production_timer >= self.production_time:
+            self.resources[self.output_resource] += 1
+            self.in_processing = False
+            self.production_timer = 0.0
+
+        #  TODO: добавить обработку дронов
+
 
     def has_all_inputs(self) -> bool:
-        pass
         """
         Проверяет наличие всех необходимых ресурсов для производства
 
@@ -419,6 +471,15 @@ class ProductionBuilding(Building):
         - Для каждого ресурса проверяет количество
         - Возвращает False при первой нехватке
         """
+        # если каждый раз проверять одно и то же, то будет слишком трудно
+        # функции - дорогая операция, так что опять пойдем через флаг
+        if not self.in_processing:
+            if all(self.resources.get(key, 0) >= val for key, val in self.input_resources.items()):
+                self.in_processing = True
+                for key, val in self.input_resources.items():
+                    self.resources[key] -= val
+                return True
+        return False
 
     def produce_output(self):
         pass
@@ -433,7 +494,6 @@ class ProductionBuilding(Building):
         """
 
     def can_give_resource(self) -> bool:
-        pass
         """
         Проверяет, может ли здание отдать ресурс
 
@@ -444,6 +504,7 @@ class ProductionBuilding(Building):
         - Проверяет наличие output_resource в ресурсах
         - Возвращает True если количество > 0
         """
+        return self.resources.get(self.output_resource, 0) > 0
 
 
 class BronzeFurnace(ProductionBuilding):
