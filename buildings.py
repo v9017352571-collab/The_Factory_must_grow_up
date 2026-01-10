@@ -273,9 +273,6 @@ class MineDrill(Building):
         self.fuel_required = fuel_required
         self.output_resource = cell_resource  # Бур производит ресурс клетки
 
-        # предлагаю немного поменять логику и сделать ее через флаги добычи
-        self.in_mining = False
-
         # Время добычи зависит от типа бура
         self.production_time = 3.0 if drill_type == "угольный" else 1.0
         self.production_timer = 0.0
@@ -295,25 +292,15 @@ class MineDrill(Building):
         - Сбрасывает таймер
         - Обрабатывает очереди дронов
         """
-        if self.in_mining or not self.fuel_required:
-            self.production_timer += delta_time
-        else:
-            self.try_start_mining()
+        self.production_timer += delta_time
         if self.production_timer >= self.production_time:
-            self.in_mining = False
-            self.production_timer = 0.0
-            self.resources[self.output_resource] += 1
+            if not self.fuel_required or self.resources.get("Уголь", 0) > 0:
+                self.resources["Уголь"] -= 1
+                self.produce_resource()
+                self.production_timer = 0.0
 
         # TODO: добавить обработку дронов
 
-    def try_start_mining(self):
-        """
-        пытается запустить производство
-        если есть уголь - сжигаем его и меняем флаг производства
-        """
-        if self.resources.get("Уголь", 0) > 0:
-            self.in_mining = True
-            self.resources["Уголь"] -= 1
 
     def produce_resource(self):
         """
@@ -324,10 +311,10 @@ class MineDrill(Building):
         - Для электрического бура: сразу добывает ресурс
         - Добавляет ресурс cell_resource во внутреннее хранилище
         - Если нет места - ресурс не добывается (теряется)
-        - После производства вызывает can_give_resource() для проверки
+        - После производства вызывает can_give_resource() для проверки - besdar : для чего??
         """
-        pass
-        # пока не понимаю зачем, так как это сделано в update, потом доработаю
+        if self.can_accept(self.output_resource):
+            self.accept_resource(self.output_resource)
 
     def can_give_resource(self) -> bool:
         """
@@ -375,18 +362,6 @@ class ElectricDrill(MineDrill):
         self.hp = BUILDING_HP["Электрический бур"]
         self.max_hp = self.hp
 
-    def produce_resource(self):
-        """
-        Добывает ресурс с клетки для электрического бура
-
-        Логика:
-        - Не проверяет наличие топлива
-        - Сразу добывает ресурс cell_resource (любой включая железную руду)
-        - Если нет места для ресурса - ресурс теряется
-        - Работает независимо от наличия других ресурсов
-        """
-        pass # в update MineDrill это сделано, если я не прав потом доделаю
-
 
 class ProductionBuilding(Building):
     """Базовый класс для производственных зданий"""
@@ -431,8 +406,6 @@ class ProductionBuilding(Building):
         self.production_timer = 0.0
         self.can_produce = False
 
-        self.in_processing = False
-
     def update(self, delta_time: float):
         """
         Обновление состояния производства
@@ -447,17 +420,13 @@ class ProductionBuilding(Building):
         - Сбрасывает таймер после производства
         - Обрабатывает очереди дронов
         """
-        if self.in_processing:
+        if self.has_all_inputs():
             self.production_timer += delta_time
-        else:
-            self.has_all_inputs()
-        if self.production_timer >= self.production_time:
-            self.resources[self.output_resource] += 1
-            self.in_processing = False
-            self.production_timer = 0.0
+            if self.production_timer >= self.production_time:
+                self.produce_output()
+                self.production_timer = 0.0
 
         #  TODO: добавить обработку дронов
-
 
     def has_all_inputs(self) -> bool:
         """
@@ -471,18 +440,13 @@ class ProductionBuilding(Building):
         - Для каждого ресурса проверяет количество
         - Возвращает False при первой нехватке
         """
-        # если каждый раз проверять одно и то же, то будет слишком трудно
-        # функции - дорогая операция, так что опять пойдем через флаг
         if not self.in_processing:
             if all(self.resources.get(key, 0) >= val for key, val in self.input_resources.items()):
-                self.in_processing = True
-                for key, val in self.input_resources.items():
-                    self.resources[key] -= val
+                self.can_produce = True
                 return True
         return False
 
     def produce_output(self):
-        pass
         """
         Производит выходной ресурс
 
@@ -492,6 +456,9 @@ class ProductionBuilding(Building):
         - Добавляет выходной ресурс во внутреннее хранилище
         - Сбрасывает таймер производства
         """
+        if self.has_all_inputs():
+            for key, val in self.input_resources.items():
+                self.resources[key] -= val
 
     def can_give_resource(self) -> bool:
         """
@@ -539,15 +506,6 @@ class BronzeFurnace(ProductionBuilding):
         self.hp = BUILDING_HP["Печь для бронзы"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли печь отдать бронзу
-
-        Возвращает:
-        bool - True если есть бронза, False если нет
-        """
-
 
 class SiliconFurnace(ProductionBuilding):
     """Кремниевая печь - производит кремний из песка и угля"""
@@ -580,15 +538,6 @@ class SiliconFurnace(ProductionBuilding):
 
         self.hp = BUILDING_HP["Кремниевая печь"]
         self.max_hp = self.hp
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли печь отдать кремний
-
-        Возвращает:
-        bool - True если есть кремний, False если нет
-        """
 
 
 class CircuitFactory(ProductionBuilding):
@@ -623,15 +572,6 @@ class CircuitFactory(ProductionBuilding):
         self.hp = BUILDING_HP["Завод микросхем"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли завод отдать микросхемы
-
-        Возвращает:
-        bool - True если есть микросхемы, False если нет
-        """
-
 
 class AmmoFactory(ProductionBuilding):
     """Завод боеприпасов - производит боеприпасы из олова и угля"""
@@ -664,15 +604,6 @@ class AmmoFactory(ProductionBuilding):
 
         self.hp = BUILDING_HP["Завод боеприпасов"]
         self.max_hp = self.hp
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли завод отдать боеприпасы
-
-        Возвращает:
-        bool - True если есть боеприпасы, False если нет
-        """
 
 
 class Turret(Building):
