@@ -1,6 +1,7 @@
 # game.py
 import arcade
 from arcade.camera import Camera2D
+
 from arcade.gui import UIManager
 from typing import Dict, List, Optional, Any, Tuple, Union
 import json
