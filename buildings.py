@@ -3,7 +3,7 @@ import arcade
 from typing import Dict, List, Optional, Any, Deque
 from collections import deque
 from constants import TILE_SIZE, SPRITE_SCALE, BUILDING_HP, DRONE_PICKUP_DISTANCE, DRONE_DROP_DISTANCE, \
-    DRONE_RECOVERY_COST
+    DRONE_RECOVERY_COST, DRONE_SPEED
 from core import ResourceCost
 import random
 
@@ -12,7 +12,6 @@ class Building(arcade.Sprite):
     """Базовый класс для всех построек"""
 
     def __init__(self, filename: str, scale: float, x: float, y: float, size: int = 1,
-                 resource_capacity: Optional[Dict[str, int]] = None,
                  cost: ResourceCost = None, name: str = "Здание"):
         """
         Инициализация здания
@@ -23,7 +22,6 @@ class Building(arcade.Sprite):
         x: float - позиция X центра здания в пикселях
         y: float - позиция Y центра здания в пикселях
         size: int = 1 - размер здания в клетках (1x1, 2x2, 3x3)
-        resource_capacity: Optional[Dict[str, int]] = None - вместимость ресурсов
         cost: ResourceCost = None - стоимость постройки, если None то 1 Медь
         name: str = "Здание" - название здания для UI
 
@@ -32,8 +30,7 @@ class Building(arcade.Sprite):
         self.hp: int = 5 - здоровье здания
         self.max_hp: int = 5 - максимальное здоровье
         self.name: str - название для интерфейса
-        self.resources: Dict[str, int] - текущие ресурсы внутри здания
-        self.infinite_storage: bool = False - флаг бесконечного хранилища
+        self.resources: Dict[str, int] - текущие ресурсы внутри здания (бесконечное хранилище)
         self.cost: ResourceCost - стоимость постройки
         self.output_resource: Optional[str] = None - что производит здание (для производств)
         self.waiting_drones: Deque[Drone] = deque() - очередь дронов, ждущих ресурсы
@@ -53,23 +50,13 @@ class Building(arcade.Sprite):
         else:
             self.cost = cost
 
-        # Система хранения ресурсов
+        # Система хранения ресурсов - теперь бесконечное хранилище для каждого типа
         self.resources = {}
-        self.infinite_storage = False
         self.output_resource = None  # Что производит здание
 
         # Очереди дронов
         self.waiting_drones = deque()  # Дроны, ждущие получения ресурса
         self.waiting_for_unload = deque()  # Дроны, ждущие разгрузки
-
-        if resource_capacity is not None:
-            self.resource_capacity = resource_capacity.copy()
-            self.infinite_storage = False
-            for res in self.resource_capacity:
-                self.resources[res] = 0
-        else:
-            self.infinite_storage = True
-            self.resource_capacity = {}
 
     def take_damage(self, amount: int):
         pass
@@ -96,30 +83,29 @@ class Building(arcade.Sprite):
         resource_type: str - тип ресурса для принятия
 
         Возвращает:
-        bool - True если здание может принять ресурс, False если не может
+        bool - True всегда (бесконечное хранилище)
 
         Логика:
-        - Если infinite_storage = True (ядро) - всегда может принять
-        - Если ресурс не поддерживается этим зданием - не может принять
-        - Если здание уже заполнено этим ресурсом - не может принять
-        - Для производственных зданий - не может принять свой выходной ресурс
+        - Теперь все здания могут принимать любые ресурсы в любом количестве
+        - Исключение: турели не принимают ресурсы для производства
         """
 
-    def accept_resource(self, resource_type: str) -> bool:
+    def accept_resource(self, resource_type: str, amount: int = 1) -> bool:
         pass
         """
         Принимает ресурс в здание
 
         Параметры:
         resource_type: str - тип ресурса для принятия
+        amount: int = 1 - количество принимаемых ресурсов
 
         Возвращает:
-        bool - True если успешно принял, False если не смог
+        bool - True всегда (ресурсы всегда принимаются)
 
         Логика:
-        - Сначала проверяет can_accept()
-        - Увеличивает счетчик ресурса
-        - Если есть дроны в waiting_for_unload - пробует отдать им ресурсы
+        - Увеличивает счетчик ресурса на amount
+        - Если ресурса еще нет в словаре - создает его
+        - Не проверяет лимиты (бесконечное хранилище)
         """
 
     def has_resource(self, resource_type: str) -> bool:
@@ -131,7 +117,7 @@ class Building(arcade.Sprite):
         resource_type: str - тип ресурса
 
         Возвращает:
-        bool - True если есть хотя бы один ресурс, False если нет
+        bool - True если ресурс есть (количество > 0), False если нет
         """
 
     def consume_resource(self, resource_type: str, amount: int = 1) -> bool:
@@ -147,7 +133,7 @@ class Building(arcade.Sprite):
         bool - True если успешно потребил, False если недостаточно
 
         Логика:
-        - Проверяет наличие ресурса
+        - Проверяет количество ресурса
         - Уменьшает количество на amount
         - Если ресурса не хватает - возвращает False
         """
@@ -192,8 +178,8 @@ class Building(arcade.Sprite):
         - Для каждого дрона в очереди:
           * Проверяет расстояние до здания
           * Если дрон на расстоянии DRONE_PICKUP_DISTANCE/DRONE_DROP_DISTANCE:
-            - Для waiting_drones: пытается отдать ресурс
-            - Для waiting_for_unload: пытается принять ресурс
+            - Для waiting_drones: отдает ВСЕ ресурсы дрону (случайный выбор если несколько дронов)
+            - Для waiting_for_unload: принимает ВСЕ ресурсы от дрона
           * Если операция успешна - удаляет дрона из очереди
           * Если неуспешна - дрон остается в очереди
         """
@@ -210,6 +196,40 @@ class Building(arcade.Sprite):
         - Для производственных зданий: проверяет наличие output_resource
         - Для буров: проверяет наличие добытого ресурса
         - Для ядра: всегда True (бесконечное хранилище)
+        """
+
+    def give_all_resources_to_drone(self, drone: 'Drone') -> bool:
+        pass
+        """
+        Отдает все ресурсы дрону
+
+        Параметры:
+        drone: Drone - дрон, которому отдаются ресурсы
+
+        Возвращает:
+        bool - True если успешно отдал, False если не смог
+
+        Логика:
+        - Если это производственное здание - отдает все output_resource
+        - Если это бур - отдает все ресурсы клетки
+        - Если это ядро - отдает все доступные ресурсы
+        - После передачи очищает свои ресурсы
+        """
+
+    def accept_all_resources_from_drone(self, drone: 'Drone') -> bool:
+        pass
+        """
+        Принимает все ресурсы от дрона
+
+        Параметры:
+        drone: Drone - дрон, от которого принимаются ресурсы
+
+        Возвращает:
+        bool - True всегда (бесконечное хранилище)
+
+        Логика:
+        - Принимает все ресурсы из drone.cargo_resources
+        - Очищает груз дрона после приемки
         """
 
 
@@ -240,13 +260,7 @@ class MineDrill(Building):
         self.production_time: float - время добычи в секундах
         self.output_resource: str = cell_resource - что производит бур
         """
-        # Определяем вместимость ресурсов
-        resource_capacity = {"any": 1}  # Может хранить один любой ресурс
-        if fuel_required:
-            resource_capacity = {"Уголь": 1}  # Для угольного бура нужно топливо
-
         super().__init__(filename, scale, x, y, size=1,
-                         resource_capacity=resource_capacity,
                          cost=cost, name=name)
 
         self.drill_type = drill_type
@@ -284,7 +298,6 @@ class MineDrill(Building):
         - Для угольного бура: проверяет наличие угля, потребляет его, добывает ресурс
         - Для электрического бура: сразу добывает ресурс
         - Добавляет ресурс cell_resource во внутреннее хранилище
-        - Если нет места - ресурс не добывается (теряется)
         - После производства вызывает can_give_resource() для проверки
         """
 
@@ -300,6 +313,7 @@ class MineDrill(Building):
         - Проверяет наличие cell_resource в ресурсах
         - Возвращает True если количество > 0
         """
+
 
 
 class ElectricDrill(MineDrill):
@@ -334,18 +348,6 @@ class ElectricDrill(MineDrill):
         self.hp = BUILDING_HP["Электрический бур"]
         self.max_hp = self.hp
 
-    def produce_resource(self):
-        pass
-        """
-        Добывает ресурс с клетки для электрического бура
-
-        Логика:
-        - Не проверяет наличие топлива
-        - Сразу добывает ресурс cell_resource (любой включая железную руду)
-        - Если нет места для ресурса - ресурс теряется
-        - Работает независимо от наличия других ресурсов
-        """
-
 
 class ProductionBuilding(Building):
     """Базовый класс для производственных зданий"""
@@ -375,12 +377,7 @@ class ProductionBuilding(Building):
         self.production_timer: float = 0.0 - текущий таймер
         self.can_produce: bool = False - флаг готовности к производству
         """
-        # Создаем вместимость для всех ресурсов (входные + выходной)
-        capacity = input_resources.copy()
-        capacity[output_resource] = 1  # Может хранить свой выходной ресурс
-
         super().__init__(filename, scale, x, y, size=size,
-                         resource_capacity=capacity,
                          cost=cost,
                          name=name)
 
@@ -440,9 +437,8 @@ class ProductionBuilding(Building):
         Возвращает:
         bool - True если есть выходной ресурс, False если нет
 
-        Логика:
-        - Проверяет наличие output_resource в ресурсах
-        - Возвращает True если количество > 0
+        Возвращает:
+        bool - True если количество output_resource > 0
         """
 
 
@@ -478,15 +474,6 @@ class BronzeFurnace(ProductionBuilding):
         self.hp = BUILDING_HP["Печь для бронзы"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли печь отдать бронзу
-
-        Возвращает:
-        bool - True если есть бронза, False если нет
-        """
-
 
 class SiliconFurnace(ProductionBuilding):
     """Кремниевая печь - производит кремний из песка и угля"""
@@ -520,57 +507,6 @@ class SiliconFurnace(ProductionBuilding):
         self.hp = BUILDING_HP["Кремниевая печь"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли печь отдать кремний
-
-        Возвращает:
-        bool - True если есть кремний, False если нет
-        """
-
-
-class CircuitFactory(ProductionBuilding):
-    """Завод микросхем - производит микросхемы из меди, олова и кремния"""
-
-    def __init__(self, filename: str, scale: float, x: float, y: float):
-        """
-        Инициализация завода микросхем
-
-        Параметры:
-        filename: str - путь к изображению
-        scale: float - масштаб
-        x: float - позиция X центра
-        y: float - позиция Y центра
-
-        Атрибуты:
-        self.size: int = 3 - размер 3x3 клетки
-        self.hp: int = 5 - здоровье из констант
-        self.max_hp: int = 5 - максимальное здоровье
-        self.input_resources: Dict[str, int] = {'Медь': 1, 'Олово': 1, 'Кремний': 1}
-        self.output_resource: str = 'Микросхема'
-        self.production_time: float = 3.0 - время производства в секундах
-        """
-        cost = ResourceCost([[4, 'Медь'], [2, 'Кремний']])
-        super().__init__(filename, scale, x, y, size=3,
-                         input_resources={"Медь": 1, "Олово": 1, "Кремний": 1},
-                         output_resource="Микросхема",
-                         production_time=3.0,
-                         cost=cost,
-                         name="Завод микросхем")
-
-        self.hp = BUILDING_HP["Завод микросхем"]
-        self.max_hp = self.hp
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли завод отдать микросхемы
-
-        Возвращает:
-        bool - True если есть микросхемы, False если нет
-        """
-
 
 class AmmoFactory(ProductionBuilding):
     """Завод боеприпасов - производит боеприпасы из олова и угля"""
@@ -603,15 +539,6 @@ class AmmoFactory(ProductionBuilding):
 
         self.hp = BUILDING_HP["Завод боеприпасов"]
         self.max_hp = self.hp
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли завод отдать боеприпасы
-
-        Возвращает:
-        bool - True если есть боеприпасы, False если нет
-        """
 
 
 class Turret(Building):
@@ -775,18 +702,6 @@ class CopperTurret(Turret):
         self.hp = BUILDING_HP["Медная турель"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли турель отдать ресурс
-
-        Возвращает:
-        bool - False
-
-        Логика:
-        - Турели никогда не отдают ресурсы
-        """
-
 
 class BronzeTurret(Turret):
     """Бронзовая турель - средняя турель, стреляет боеприпасами"""
@@ -823,21 +738,9 @@ class BronzeTurret(Turret):
         self.hp = BUILDING_HP["Бронзовая турель"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли турель отдать ресурс
-
-        Возвращает:
-        bool - False
-
-        Логика:
-        - Турели никогда не отдают ресурсы
-        """
-
 
 class LongRangeTurret(Turret):
-    """Дальняя турель - мощная турель, стреляет боеприпасами и микросхемами"""
+    """Дальняя турель - мощная турель, стреляет боеприпасами и кремния"""
 
     def __init__(self, base_filename: str, tower_filename: str, scale: float, x: float, y: float):
         """
@@ -871,176 +774,33 @@ class LongRangeTurret(Turret):
         self.hp = BUILDING_HP["Дальняя турель"]
         self.max_hp = self.hp
 
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли турель отдать ресурс
-
-        Возвращает:
-        bool - False
-
-        Логика:
-        - Турели никогда не отдают ресурсы
-        """
-
-
-class DroneStation(Building):
-    """Дрон-станция - управляет одним дроном"""
-
-    def __init__(self, filename: str, scale: float, x: float, y: float):
-        """
-        Инициализация дрон-станции
-
-        Параметры:
-        filename: str - путь к изображению станции (32x32 пикселей)
-        scale: float - масштаб (0.5 для 16px)
-        x: float - позиция X центра станции
-        y: float - позиция Y центра станции
-
-        Атрибуты:
-        self.size: int = 1 - размер 1x1 клетка
-        self.hp: int = 5 - здоровье из констант
-        self.max_hp: int = 5 - максимальное здоровье
-        self.drone: Optional[Drone] = None - ссылка на дрона
-        self.source_building: Optional[Building] = None - здание-источник
-        self.destination_building: Optional[Building] = None - здание-приемник
-        self.is_operational: bool = True - станция работает
-        """
-        super().__init__(filename, scale, x, y, size=1,
-                         resource_capacity=None,  # нет внутренних ресурсов
-                         cost=ResourceCost([[1, 'Медь']]),
-                         name="Дрон-станция")
-
-        self.drone = None
-        self.source_building = None  # Здание, откуда брать ресурсы
-        self.destination_building = None  # Здание, куда отдавать ресурсы
-        self.is_operational = True  # Станция работает
-
-        self.hp = BUILDING_HP["Дрон-станция"]
-        self.max_hp = self.hp
-
-    def create_drone(self, drone_class, drone_filename, drone_scale):
-        pass
-        """
-        Создает дрона для станции
-
-        Параметры:
-        drone_class: class - класс дрона (Drone)
-        drone_filename: str - путь к изображению дрона
-        drone_scale: float - масштаб изображения дрона
-
-        Логика:
-        - Создает экземпляр Drone
-        - Устанавливает ссылку на станцию
-        - Размещает дрона над станцией (y + 32 пикселя)
-        - Прикрепляет дрон к станции
-        - Добавляет дрона в общий список дронов игры
-        - Возвращает созданного дрона
-
-        Особенности:
-        - Вызывается при постройке станции
-        - Дрон появляется сразу при постройке станции
-        - Если станция уничтожена - не может создать дрона
-        """
-
-    def set_route(self, source: Building, destination: Building):
-        pass
-        """
-        Устанавливает маршрут для дрона
-
-        Параметры:
-        source: Building - здание-источник (откуда брать ресурсы)
-        destination: Building - здание-приемник (куда отдавать ресурсы)
-
-        Логика:
-        - Сохраняет источник и приемник
-        - Если дрон существует - устанавливает ему маршрут
-        - Дрон начинает движение по маршруту
-        - Дрон добавляется в очереди обоих зданий
-        """
-
-    def take_damage(self, amount: int):
-        pass
-        """
-        Наносит урон станции
-
-        Параметры:
-        amount: int - количество урона
-
-        Логика:
-        - Сначала наносит урон дрону если он есть
-        - Если дрон уничтожен - автоматически ломает станцию
-        - Если станция уничтожена - уничтожает и дрона
-        - Вызывает базовый метод take_damage()
-        - При разрушении устанавливает is_operational = False
-
-        Особенность:
-        - Дрон и станция связаны жизнью - при смерти одного умирает и другой
-        """
-
-    def recover_drone(self, core: 'Core'):
-        pass
-        """
-        Восстанавливает дрона после уничтожения
-
-        Параметры:
-        core: Core - ядро для вычета ресурсов
-
-        Логика:
-        - Вычитает из ядра по одному ресурсу каждого доступного вида
-        - Создает нового дрона над станцией
-        - Если были заданы source_building и destination_building - устанавливает тот же маршрут
-        - Новый дрон начинает в состоянии WAITING_AT_STATION
-        - Работает только если станция жива (is_operational = True)
-        """
-
-    def destroy_drone(self):
-        pass
-        """
-        Уничтожает дрона (при разрушении станции)
-
-        Логика:
-        - Если дрон существует - наносит ему максимальный урон
-        - Удаляет ссылку на дрона
-        - Не восстанавливает дрона автоматически
-        """
-
 
 class Drone(arcade.Sprite):
-    """Дрон для доставки ресурсов - ключевой элемент логистики"""
+    """Дрон для доставки ресурсов"""
 
-    def __init__(self, filename: str, scale: float, station: DroneStation):
+    def __init__(self, filename: str, scale: float, core: Any):
         """
         Инициализация дрона
 
         Параметры:
         filename: str - путь к изображению дрона (32x32 пикселей)
         scale: float - масштаб (0.5 для 16px)
-        station: DroneStation - станция-владелец
 
         Атрибуты:
-        self.station: DroneStation - ссылка на станцию
-        self.cargo: Optional[str] = None - текущий ресурс в грузе
-        self.source: Optional[Building] = None - здание-источник для забора
-        self.destination: Optional[Building] = None - здание-приемник для доставки
+        self.station: Any - ссылка на станцию
+        self.cargo_resources: Dict[str, int] = {} - все ресурсы в грузе (бесконечное хранилище)
+        self.source: Optional[Any] = None - здание-источник для забора
+        self.destination: Optional[Any] = None - здание-приемник для доставки
         self.path: List[Tuple[float, float]] = [] - путь следования
         self.current_waypoint: int = 0 - текущая точка пути
-        self.state: str = "WAITING_AT_STATION" - состояние дрона:
-            - WAITING_AT_STATION: ждет на станции
-            - FLYING_TO_SOURCE: летит к источнику
-            - WAITING_AT_SOURCE: ждет в очереди у источника
-            - TAKING_RESOURCE: получает ресурс от источника
-            - FLYING_TO_DEST: летит к приемнику
-            - WAITING_AT_DEST: ждет в очереди у приемника
-            - GIVING_RESOURCE: отдает ресурс приемнику
-            - RETURNING_TO_STATION: возвращается на станцию
+        self.state: str = "WAITING_AT_STATION" - состояние дрона
         self.hp: int = 2 - здоровье дрона
         self.max_hp: int = 2 - максимальное здоровье
         self.speed: float = 16.0 - скорость в пикселях/сек (1 блок/сек)
         """
         super().__init__(filename, scale)
-        self.station = station
-        self.cargo = None
+        self.core = core
+        self.cargo_resources = {}  # Словарь всех ресурсов в грузе
         self.source = None  # Здание-источник
         self.destination = None  # Здание-приемник
         self.path = []
@@ -1048,20 +808,20 @@ class Drone(arcade.Sprite):
         self.state = "WAITING_AT_STATION"  # Начинает над станцией
         self.hp = 2
         self.max_hp = 2
-        self.speed = 16.0  # 1 блок/сек = 16 пикселей/сек
+        self.speed = DRONE_SPEED * TILE_SIZE  # 16 пикселей/сек
 
         # Начальная позиция - над станцией
-        self.center_x = station.center_x
-        self.center_y = station.center_y + 32
+        self.center_x = core.center_x
+        self.center_y = core.center_y
 
-    def set_route(self, source: Building, destination: Building):
+    def set_route(self, source: Any, destination: Any):
         pass
         """
         Устанавливает маршрут от источника к приемнику
 
         Параметры:
-        source: Building - здание-источник
-        destination: Building - здание-приемник
+        source: Any - здание-источник
+        destination: Any - здание-приемник
 
         Логика:
         - Сохраняет источник и приемник
@@ -1076,9 +836,10 @@ class Drone(arcade.Sprite):
         Вычисляет путь к источнику ресурсов
 
         Логика:
-        - Путь всегда кратчайший: сначала по X до source.center_x, потом по Y до source.center_y
-        - Создает список точек с шагом self.speed
-        - Не обходит препятствия (летит напролом)
+        - Простой алгоритм: сначала по X, потом по Y
+        - Создает список точек от текущей позиции до источника
+        - Каждая точка отстоит на self.speed пикселей
+        - Путь оптимизирован для плавного движения
         """
 
     def calculate_path_to_destination(self):
@@ -1087,22 +848,20 @@ class Drone(arcade.Sprite):
         Вычисляет путь к приемнику ресурсов
 
         Логика:
-        - Аналогична calculate_path_to_source()
+        - Аналогичен calculate_path_to_source()
         - Создает путь от текущей позиции до приемника
-        - Не обходит препятствия
         """
 
     def calculate_path_to_station(self):
         pass
         """
-        Вычисляет путь обратно к станции
+        Вычисляет путь обратно к ядру
 
         Логика:
-        - Создает путь от текущей позиции до станции
-        - Кратчайший путь: сначала по X, потом по Y
+        - Создает путь от текущей позиции до ядра
         """
 
-    def update(self, delta_time: float):
+    def update(self, delta_time):
         pass
         """
         Основной цикл дрона
@@ -1111,57 +870,20 @@ class Drone(arcade.Sprite):
         delta_time: float - время с предыдущего кадра
 
         Логика для каждого состояния:
-        1. WAITING_AT_STATION:
-           - Ждет на станции
-           - Если станция установила маршрут - переходит в FLYING_TO_SOURCE
-           - Если станция уничтожена - дрон уничтожается
-
-        2. FLYING_TO_SOURCE:
-           - Движется к источнику по пути
-           - При достижении источника - добавляет себя в waiting_drones
-           - Переходит в WAITING_AT_SOURCE
-
-        3. WAITING_AT_SOURCE:
-           - Ждет в очереди источника
-           - Когда доходит очередь - проверяет расстояние
-           - Если на расстоянии DRONE_PICKUP_DISTANCE - переходит в TAKING_RESOURCE
-           - Если источник уничтожен - возвращается на станцию
-
-        4. TAKING_RESOURCE:
-           - Получает ресурс от источника
-           - Если успешно получил - выходит из очереди и переходит в FLYING_TO_DEST
-           - Если неуспешно - остается в состоянии
-
-        5. FLYING_TO_DEST:
-           - Движется к приемнику по пути
-           - При достижении приемника - добавляет себя в waiting_for_unload
-           - Переходит в WAITING_AT_DEST
-
-        6. WAITING_AT_DEST:
-           - Ждет в очереди приемника
-           - Когда доходит очередь - проверяет расстояние
-           - Если на расстоянии DRONE_DROP_DISTANCE - переходит в GIVING_RESOURCE
-           - Если приемник уничтожен - возвращается на станцию
-
-        7. GIVING_RESOURCE:
-           - Отдает ресурс приемнику
-           - Если успешно отдал - выходит из очереди и переходит в RETURNING_TO_STATION
-           - Если неуспешно - остается в состоянии
-
-        8. RETURNING_TO_STATION:
-           - Движется обратно к станции
-           - При достижении станции - переходит в WAITING_AT_STATION
-
-        Особенности:
-        - Если станция уничтожена - дрон уничтожается
-        - Если здание в очереди уничтожено - удаляется из всех очередей и возвращается на станцию
-        - При уничтожении дрона - вызывает recover_drone() у станции
+        1. WAITING_AT_STATION: ждет на ядре, готов к новому маршруту
+        2. FLYING_TO_SOURCE: движется к источнику по пути
+        3. WAITING_AT_SOURCE: ждет в очереди источника на получение ВСЕХ ресурсов
+        4. TAKING_ALL_RESOURCES: получает ВСЕ ресурсы от источника сразу
+        5. FLYING_TO_DEST: движется к приемнику по пути
+        6. WAITING_AT_DEST: ждет в очереди приемника на отдачу ВСЕХ ресурсов
+        7. GIVING_ALL_RESOURCES: отдает ВСЕ ресурсы приемнику сразу
+        8. RETURNING_TO_STATION: возвращается на ядро для нового задания
         """
 
     def move_along_path(self, delta_time: float):
         pass
         """
-        Движение по пути к следующей точке
+        Движение по пути к следующей точке - упрощенная версия
 
         Параметры:
         delta_time: float - время с предыдущего кадра
@@ -1209,39 +931,56 @@ class Drone(arcade.Sprite):
         Логика:
         - Уменьшает HP на amount
         - Если HP <= 0 - дрон уничтожен
-        - При уничтожении дрона:
-          * Если станция жива - вызывает station.recover_drone()
-          * Если станция уничтожена - дрон исчезает без восстановления
         - Не позволяет HP быть меньше 0
         """
 
-    def remove_from_queues(self):
-        pass
-        """
-        Удаляет дрона из всех очередей
-
-        Логика:
-        - Если есть source - удаляет из waiting_drones источника
-        - Если есть destination - удаляет из waiting_for_unload приемника
-        - Если есть станция - удаляет из всех связанных очередей
-        """
-
-    def handle_building_destroyed(self, building: Building):
+    def handle_building_destroyed(self, building: Any):
         pass
         """
         Обрабатывает разрушение здания
 
         Параметры:
-        building: Building - уничтоженное здание
+        building: Any - уничтоженное здание
 
         Логика:
         - Если разрушен источник:
-          * Если дрон в состояниях WAITING_AT_SOURCE/TAKING_RESOURCE - переходит в RETURNING_TO_STATION
-          * Удаляет себя из очереди источника
-          * Ресурс, если был в грузе, исчезает
+          * Если дрон в состояниях WAITING_AT_SOURCE/TAKING_ALL_RESOURCES - возвращается к ядро
+          * Ресурсы, если были в грузе, остаются у дрона
         - Если разрушен приемник:
-          * Если дрон в состояниях WAITING_AT_DEST/GIVING_RESOURCE - переходит в RETURNING_TO_STATION
-          * Удаляет себя из очереди приемника
-          * Ресурс в грузе исчезает
-        - Если разрушена станция - дрон уничтожается
+          * Если дрон в состояниях WAITING_AT_DEST/GIVING_ALL_RESOURCES - возвращается на Ядро
+        """
+
+    def give_all_resources_to_drone(self, drone: 'Drone') -> bool:
+        pass
+        """
+        Отдает ВСЕ ресурсы дрону
+
+        Параметры:
+        drone: Drone - дрон, которому отдаются ресурсы
+
+        Возвращает:
+        bool - True если успешно отдал, False если не смог
+
+        Логика:
+        - Если несколько дронов в очереди - ресурсы отдаются одному случайному дрону
+        - Дрон получает ВСЕ ресурсы здания сразу
+        - После передачи здание очищает свои ресурсы
+        - Если ресурсов нет - возвращает False
+        """
+
+    def accept_all_resources_from_drone(self, drone: 'Drone') -> bool:
+        pass
+        """
+        Принимает ВСЕ ресурсы от дрона
+
+        Параметры:
+        drone: Drone - дрон, от которого принимаются ресурсы
+
+        Возвращает:
+        bool - True всегда (бесконечное хранилище)
+
+        Логика:
+        - Принимает все ресурсы из drone.cargo_resources
+        - Добавляет их к своим ресурсам
+        - Очищает груз дрона после приемки
         """

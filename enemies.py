@@ -215,3 +215,100 @@ class HarkerBeetle(Bug):
         """
         super().__init__(filename, scale, hp=2, damage=3, speed=1.0,
                          is_ranged=True, name="Жук-харкатель")
+
+
+class Bullet(arcade.Sprite):
+    """Базовый класс для всех пуль в игре"""
+
+    def __init__(self, filename: str, scale: float, damage: int, lifetime: float,
+                 source: Any, target: Any, speed: float = 300.0):
+        """
+        Инициализация пули
+
+        Параметры:
+        filename: str - путь к изображению пули (32x32 пикселей)
+        scale: float - масштаб изображения (0.5 для 16px)
+        damage: int - урон по цели при попадании
+        lifetime: float - время жизни пули в секундах
+        source: Any - источник выстрела (турель или жук)
+        target: Any - цель выстрела (жук, ядро, игрок, здание)
+        speed: float = 300.0 - скорость пули в пикселях в секунду
+
+        Атрибуты:
+        self.damage: int - урон по цели
+        self.lifetime: float - оставшееся время жизни в секундах
+        self.max_lifetime: float - максимальное время жизни
+        self.source: Any - источник выстрела
+        self.target: Any - текущая цель
+        self.speed: float - скорость движения в пикселях/сек
+        self.velocity: Tuple[float, float] - вектор скорости
+        """
+        super().__init__(filename, scale)
+        self.damage = damage
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.source = source
+        self.target = target
+        self.speed = speed
+        self.velocity = (0.0, 0.0)
+
+        # Устанавливаем начальную позицию и направление
+        if hasattr(source, 'tower_sprite'):
+            # Это турель - используем позицию башни
+            self.center_x = source.tower_sprite.center_x
+            self.center_y = source.tower_sprite.center_y
+        else:
+            # Обычный источник
+            self.center_x = source.center_x
+            self.center_y = source.center_y
+
+        self.set_velocity_towards_target()
+
+    def set_velocity_towards_target(self):
+        pass
+        """
+        Вычисляет вектор скорости в направлении цели
+
+        Логика:
+        - Находит вектор от источника к цели
+        - Нормализует вектор
+        - Умножает на скорость пули
+        - Устанавливает velocity
+        """
+
+    def update(self, delta_time: float):
+        pass
+        """
+        Обновление состояния пули
+
+        Параметры:
+        delta_time: float - время с предыдущего кадра
+
+        Логика:
+        - Уменьшает время жизни на delta_time
+        - Двигается в направлении цели
+        - Проверяет столкновения с целью
+        - Удаляется при истечении времени жизни
+        """
+
+    def distance_to(self, target: arcade.Sprite) -> float:
+        pass
+        """
+        Вычисляет расстояние до цели
+
+        Параметры:
+        target: arcade.Sprite - цель для измерения расстояния
+
+        Возвращает:
+        float - расстояние в пикселях между центрами спрайтов
+        """
+
+    def hit_target(self):
+        pass
+        """
+        Обработка попадания пули в цель
+
+        Логика:
+        - Если цель имеет метод take_damage() - наносит урон
+        - Удаляет пулю после попадания
+        """
