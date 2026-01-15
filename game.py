@@ -4,7 +4,7 @@ from arcade.camera import Camera2D
 from arcade.gui import UIManager
 import math
 import random
-from constants import TILE_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, JSON
+from constants import TILE_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS
 from core import Core, ResourceCost
 from player import Player
 from buildings import (Building, ElectricDrill,
@@ -41,7 +41,6 @@ class MyGame(arcade.Window):
         self.bullets: arcade.SpriteList - все пули (турелей и жуков)
         self.bugs: arcade.SpriteList - все враги
         self.drones: arcade.SpriteList - все дроны
-        self.grid: List[List[Optional[Building]]] - сетка карты для проверки коллизий
 
         Параметры карты (берутся из константы JSON):
         self.map_width: int - ширина карты в калетках
@@ -77,51 +76,25 @@ class MyGame(arcade.Window):
 
         # Инициализация камер
         self.world_camera = Camera2D()
-        self.gui_camera = Camera2D()
-        self.world_camera.viewport = (0, 0, width, height)
-        self.gui_camera.viewport = (0, 0, width, height)
 
         # Инициализация игровых сущностей
-        self.player = None
-        self.core = None
+        self.players = arcade.SpriteList()
         self.buildings = arcade.SpriteList()
-        self.bullets = arcade.SpriteList()
         self.bugs = arcade.SpriteList()
-        self.drones = arcade.SpriteList()
-        self.grid = None
-
-        # Параметры карты (загружаются из константы MAP_DATA)
-        self.map_width = JSON["width"]
-        self.map_height = JSON["height"]
-        self.map_width_pixels = self.map_width * TILE_SIZE
-        self.map_height_pixels = self.map_height * TILE_SIZE
 
         # Система волн (загружается из константы WAVES)
-        self.waves = WAVES.copy()
+        self.waves = WAVES
         self.current_wave_index = 0
         self.wave_timer = 0.0
 
-        # Система строительства
-        self.selected_building_type = None
-        self.delete_mode = False
-        self.programming_station = None
-        self.programming_step = 0
-        self.programming_source = None
-        self.programming_destination = None
-
         # Состояние игры
         self.game_state = "playing"
-        self.hovered_building = None
         self.pressed_keys = set()
+        self.grid = None # сетка со зданиями и т.п. на будущее
 
-        # UI система
-        self.ui_manager = UIManager()
-        self.info_text = ""
-        self.info_position = (0, 0)
-
-        # Загрузка карты и настройка UI
+        # Загрузка карты и настройка
         self.load_map()
-        self.setup_ui()
+        self.setup()
 
     def load_map(self):
         """
@@ -135,7 +108,14 @@ class MyGame(arcade.Window):
         - Инициализирует месторождения руд для буров
         - Устанавливает начальные ресурсы ядра
         """
-        pass
+
+        # Создаем сетку карты
+        self.map = arcade.load_tilemap(":resources:/tiled_maps/level_1.json", scaling=0.5)
+        self.map_width = int(self.map.width)
+        self.map_height = int(self.map.height)
+        self.map_width_pixels = self.map_width * TILE_SIZE
+        self.map_height_pixels = self.map_height * TILE_SIZE
+        self.grid = [[None for _ in range(self.map_width)] for _ in range(self.map_height)]
 
     def setup_ui(self):
         """
@@ -154,7 +134,6 @@ class MyGame(arcade.Window):
         Каждая кнопка привязана к обработчику событий для соответствующего действия.
         """
         pass
-
     def setup(self):
         """
         Полная инициализация игры после создания окна
@@ -169,22 +148,12 @@ class MyGame(arcade.Window):
         Этот метод вызывается после создания окна и загрузки карты,
         готовит игру к запуску.
         """
-        pass
+        self.core = Core("Изображения\Здания\Ядро (2).png", SPRITE_SCALE, 200, 200)
+        self.buildings.append(self.core)
+        self.player = Player("Изображения\Остальное\Нгг.png", SPRITE_SCALE, self.core)
+        self.players.append(self.player)
+        self.wave_timer = self.waves[0][0] if self.waves else 180.0
 
-    def center_camera_to_player(self):
-        """
-        Центрирование игровой камеры на игроке
-
-        Логика работы:
-        1. Вычисляет позицию центра экрана относительно игрока
-        2. Ограничивает камеру границами карты
-        3. Плавно перемещает камеру к новой позиции
-
-        Ограничения:
-        - Не выходит за левую/верхнюю границу карты (0, 0)
-        - Не выходит за правую/нижнюю границу (map_width_pixels - screen_width, map_height_pixels - screen_height)
-        """
-        pass
 
     def on_update(self, delta_time: float):
         """
@@ -211,7 +180,29 @@ class MyGame(arcade.Window):
         - Система столкновений: проверяет столкновения пуль с целями
         - Система ресурсов: управляет производством и передачей ресурсов
         """
-        pass
+        if self.game_state != "playing":
+            return
+
+            # Обновление игрока
+        if self.players:
+            self.player.update(delta_time, self.pressed_keys)
+
+        position = (
+            self.player.center_x,
+            self.player.center_y
+        )
+        self.world_camera.position = arcade.math.lerp_2d(  # Изменяем позицию камеры
+            self.world_camera.position,
+            position,
+            0.5,  # Плавность следования камеры
+        )
+
+        #self.wave_timer += delta_time
+
+        # if self.wave_timer >= self.waves[self.current_wave_index][0]:
+        #     for bug in self.waves[self.current_wave_index][2]:
+        #         BAGS[bug]()
+        #потом доделаю
 
     def update_waves(self, delta_time: float):
         """
@@ -280,7 +271,15 @@ class MyGame(arcade.Window):
         • batch drawing для SpriteList
         • минимальное количество draw calls
         """
-        pass
+        self.clear()
+
+        self.world_camera.use()
+
+
+        # Рисуем здания
+        self.buildings.draw()
+        if self.players:
+            self.players.draw()
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
         """
@@ -321,7 +320,7 @@ class MyGame(arcade.Window):
         • ENTER - возврат в меню при победе/поражении
         • ESC - пауза
         """
-        pass
+        self.pressed_keys.add(key)
 
     def on_key_release(self, key: int, modifiers: int):
         """
@@ -335,8 +334,8 @@ class MyGame(arcade.Window):
         • ESC в состоянии паузы - продолжение игры
         • ENTER в состоянии победы/поражения - возврат в меню
         """
-        pass
-
+        if key in self.pressed_keys:
+            self.pressed_keys.remove(key)
     def check_game_state(self):
         """
         Проверка состояния игры
@@ -404,3 +403,12 @@ class MyGame(arcade.Window):
         4. Возвращает половину стоимости в ядро
         """
         pass
+
+
+#Тест
+def main():
+    window = MyGame(1000, 800, "Заводы и Тауэр Дефенс")
+    arcade.run()
+
+if __name__ == "__main__":
+    main()

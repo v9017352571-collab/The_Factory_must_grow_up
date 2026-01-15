@@ -91,7 +91,6 @@ class Core(arcade.Sprite):
         super().__init__(filename, scale)
         self.center_x = x
         self.center_y = y
-        self.size = 2
         self.hp = 20
         self.max_hp = 20
         self.name = "Ядро"

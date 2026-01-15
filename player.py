@@ -44,7 +44,7 @@ class Player(arcade.Sprite):
         self.center_x = core.center_x
         self.center_y = core.center_y + core.height + 32
 
-    def update(self, delta_time: float):
+    def update(self, delta_time: float, wsad: set):
         pass
         """
         Обновление состояния игрока
@@ -58,6 +58,9 @@ class Player(arcade.Sprite):
         - Проверяет столкновения с врагами
         - Обновляет позицию на экране
         """
+        # Я использовал для теста камеры. Если хочешь, то тоже можешь попробовать.
+        # self.center_y += 1
+        # self.center_x += 1
 
     def handle_movement(self, delta_time: float):
         pass

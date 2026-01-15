@@ -1,4 +1,6 @@
 # constants.py
+from enemies import (Bug, Beetle, ArmoredBeetle, SpittingBeetle,
+                     DominicTorettoBeetle, HarkerBeetle)
 """
 Константы игры с загрузкой из базы данных уровней
 
@@ -9,7 +11,7 @@ import sqlite3
 import arcade
 
 # === ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ ===
-DB_PATH = "level.db"  # путь к файлу базы данных
+DB_PATH = "level.sqlite"  # путь к файлу базы данных
 CURRENT_LEVEL = 1  # текущий уровень для загрузки (можно изменить, но потом)
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
@@ -31,9 +33,9 @@ if row:
             [180, ["Обычный жук", "Обычный жук"]],
             [120, ["Обычный жук", "Броненосец", "Обычный жук"]],]
 
-# === КАТА ===
+# === КАРТА ===
 
-JSON = row[2]
+#JSON = row[2]
 
 # === ОСНОВНЫЕ КОНСТАНТЫ ===
 
@@ -81,6 +83,12 @@ BUILDING_HP = {
     "Бронзовая турель": 10,
     "Дальняя турель": 5
 }
-
+BAGS = {
+    "Обычный жук": Beetle,
+    "Броненосец": ArmoredBeetle,
+    "Жук-плевок": SpittingBeetle,
+    "Жук Доминико Торетто": DominicTorettoBeetle,
+    "Жук-харкатель": HarkerBeetle
+        }
 # Дополнительные константы для дронов
 DRONE_RECOVERY_COST = "all_resources"  # специальная константа для обозначения вычета всех ресурсов

@@ -8,7 +8,7 @@ class Bug(arcade.Sprite):
     """Базовый класс для всех врагов"""
 
     def __init__(self, filename: str, scale: float, hp: int, damage: int, speed: float,
-                 is_ranged: bool, name: str = "Жук"):
+                 is_ranged: bool, name: str = "Жук", cores = None):
         """
         Инициализация жука
 
@@ -40,6 +40,7 @@ class Bug(arcade.Sprite):
         self.target = None
         self.attack_cooldown = 0.0
         self.bullet_list = arcade.SpriteList()
+        self.core = cores
 
     def update(self, delta_time: float):
         pass
@@ -106,7 +107,7 @@ class Bug(arcade.Sprite):
 class Beetle(Bug):
     """Обычный жук - слабый, быстрый, ближний бой"""
 
-    def __init__(self, filename: str, scale: float):
+    def __init__(self, filename: str, scale: float, core):
         """
         Инициализация обычного жука
 
@@ -122,13 +123,13 @@ class Beetle(Bug):
         self.name: str = "Обычный жук"
         """
         super().__init__(filename, scale, hp=1, damage=1, speed=3.0,
-                         is_ranged=False, name="Обычный жук")
+                         is_ranged=False, name="Обычный жук", cores=core)
 
 
 class ArmoredBeetle(Bug):
     """Жук броненосец - медленный, прочный, ближний бой"""
 
-    def __init__(self, filename: str, scale: float):
+    def __init__(self, filename: str, scale: float, core):
         """
         Инициализация жука броненосца
 
@@ -144,13 +145,13 @@ class ArmoredBeetle(Bug):
         self.name: str = "Броненосец"
         """
         super().__init__(filename, scale, hp=3, damage=1, speed=1.0,
-                         is_ranged=False, name="Броненосец")
+                         is_ranged=False, name="Броненосец", cores=core)
 
 
 class SpittingBeetle(Bug):
     """Жук-плевок - средний урон, дальний бой"""
 
-    def __init__(self, filename: str, scale: float):
+    def __init__(self, filename: str, scale: float, core):
         """
         Инициализация жука-плевка
 
@@ -168,13 +169,13 @@ class SpittingBeetle(Bug):
         self.bullet_cooldown: float = 2.0 - перезарядка в секундах
         """
         super().__init__(filename, scale, hp=1, damage=2, speed=2.0,
-                         is_ranged=True, name="Жук-плевок")
+                         is_ranged=True, name="Жук-плевок", cores=core)
 
 
 class DominicTorettoBeetle(Bug):
     """Жук Доминико Торетто - быстрый, средний урон, ближний бой"""
 
-    def __init__(self, filename: str, scale: float):
+    def __init__(self, filename: str, scale: float, core):
         """
         Инициализация жука Доминико Торетто
 
@@ -190,13 +191,13 @@ class DominicTorettoBeetle(Bug):
         self.name: str = "Доминико Торетто"
         """
         super().__init__(filename, scale, hp=2, damage=2, speed=3.0,
-                         is_ranged=False, name="Доминико Торетто")
+                         is_ranged=False, name="Доминико Торетто", cores=core)
 
 
 class HarkerBeetle(Bug):
     """Жук-харкатель - высокий урон, медленный, дальний бой"""
 
-    def __init__(self, filename: str, scale: float):
+    def __init__(self, filename: str, scale: float, core):
         """
         Инициализация жука-харкателя
 
@@ -214,7 +215,7 @@ class HarkerBeetle(Bug):
         self.bullet_cooldown: float = 3.0 - перезарядка в секундах
         """
         super().__init__(filename, scale, hp=2, damage=3, speed=1.0,
-                         is_ranged=True, name="Жук-харкатель")
+                         is_ranged=True, name="Жук-харкатель", cores=core)
 
 
 class Bullet(arcade.Sprite):

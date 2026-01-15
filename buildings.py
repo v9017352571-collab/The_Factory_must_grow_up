@@ -5,6 +5,7 @@ from collections import deque
 from constants import TILE_SIZE, SPRITE_SCALE, BUILDING_HP, DRONE_PICKUP_DISTANCE, DRONE_DROP_DISTANCE, \
     DRONE_RECOVERY_COST, DRONE_SPEED
 from core import ResourceCost
+from enemies import Bullet
 import random
 
 
