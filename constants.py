@@ -92,3 +92,8 @@ BAGS = {
         }
 # Дополнительные константы для дронов
 DRONE_RECOVERY_COST = "all_resources"  # специальная константа для обозначения вычета всех ресурсов
+
+players = arcade.SpriteList()
+buildings = arcade.SpriteList()
+bugs = arcade.SpriteList()
+CAMERA_LERP = 0.12

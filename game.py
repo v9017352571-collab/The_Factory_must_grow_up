@@ -4,7 +4,7 @@ from arcade.camera import Camera2D
 from arcade.gui import UIManager
 import math
 import random
-from constants import TILE_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS
+from constants import TILE_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, players, buildings, bugs, CAMERA_LERP
 from core import Core, ResourceCost
 from player import Player
 from buildings import (Building, ElectricDrill,
@@ -12,7 +12,6 @@ from buildings import (Building, ElectricDrill,
                        CopperTurret, BronzeTurret, LongRangeTurret, Drone)
 from enemies import (Bug, Beetle, ArmoredBeetle, SpittingBeetle,
                      DominicTorettoBeetle, HarkerBeetle)
-
 
 class MyGame(arcade.Window):
     """Основной класс игры - управляет всем игровым процессом"""
@@ -74,13 +73,10 @@ class MyGame(arcade.Window):
         """
         super().__init__(width, height, title)
 
-        # Инициализация камер
-        self.world_camera = Camera2D()
-
-        # Инициализация игровых сущностей
-        self.players = arcade.SpriteList()
-        self.buildings = arcade.SpriteList()
-        self.bugs = arcade.SpriteList()
+        # Инициализация камер и т.п.
+        self.world_camera = arcade.camera.Camera2D()
+        self.gui_camera = arcade.camera.Camera2D()
+        self.cam_target = (0, 0)
 
         # Система волн (загружается из константы WAVES)
         self.waves = WAVES
@@ -90,10 +86,17 @@ class MyGame(arcade.Window):
         # Состояние игры
         self.game_state = "playing"
         self.pressed_keys = set()
-        self.grid = None # сетка со зданиями и т.п. на будущее
+        self.grid = None # Сетка со зданиями и т.п. на будущее
+
+        self.player = None
+        self.core = None
 
         # Загрузка карты и настройка
-        self.load_map()
+        self.map_height_pixels = None
+        self.map_width_pixels = None
+        self.map_height = None
+        self.map_width = None
+        self.map = None
         self.setup()
 
     def load_map(self):
@@ -149,11 +152,43 @@ class MyGame(arcade.Window):
         готовит игру к запуску.
         """
         self.core = Core("Изображения\Здания\Ядро (2).png", SPRITE_SCALE, 200, 200)
-        self.buildings.append(self.core)
+        buildings.append(self.core)
         self.player = Player("Изображения\Остальное\Нгг.png", SPRITE_SCALE, self.core)
-        self.players.append(self.player)
-        self.wave_timer = self.waves[0][0] if self.waves else 180.0
+        players.append(self.player)
+        self.wave_timer = self.waves[0][0]
+        self.cam_target = (self.player.center_x, self.player.center_y)
 
+    def cam(self):
+        cam_x, cam_y = self.world_camera.position
+        dz_left = cam_x - 50 // 2
+        dz_right = cam_x + 50 // 2
+        dz_bottom = cam_y - 50 // 2
+        dz_top = cam_y + 50 // 2
+
+        px, py = self.player.center_x, self.player.center_y
+        target_x, target_y = cam_x, cam_y
+
+        if px < dz_left:
+            target_x = px + 50 // 2
+        elif px > dz_right:
+            target_x = px - 50 // 2
+        if py < dz_bottom:
+            target_y = py + 50 // 2
+        elif py > dz_top:
+            target_y = py - 50 // 2
+
+        # Не показываем «пустоту» за краями карты
+        half_w = self.world_camera.viewport_width / 2
+        half_h = self.world_camera.viewport_height / 2
+        target_x = max(half_w, min(self.map_width_pixels - half_w, target_x))
+        target_y = max(half_h, min(self.map_height_pixels - half_h, target_y))
+
+        # Плавно к цели
+        smooth_x = (1 - CAMERA_LERP) * cam_x + CAMERA_LERP * target_x
+        smooth_y = (1 - CAMERA_LERP) * cam_y + CAMERA_LERP * target_y
+        self.cam_target = (smooth_x, smooth_y)
+
+        self.world_camera.position = (self.cam_target[0], self.cam_target[1])
 
     def on_update(self, delta_time: float):
         """
@@ -180,11 +215,13 @@ class MyGame(arcade.Window):
         - Система столкновений: проверяет столкновения пуль с целями
         - Система ресурсов: управляет производством и передачей ресурсов
         """
+        self.cam()
+
         if self.game_state != "playing":
             return
 
             # Обновление игрока
-        if self.players:
+        if players:
             self.player.update(delta_time, self.pressed_keys)
 
         position = (
@@ -196,13 +233,9 @@ class MyGame(arcade.Window):
             position,
             0.5,  # Плавность следования камеры
         )
+        self.update_waves(delta_time)
+        self.destroy_building()
 
-        #self.wave_timer += delta_time
-
-        # if self.wave_timer >= self.waves[self.current_wave_index][0]:
-        #     for bug in self.waves[self.current_wave_index][2]:
-        #         BAGS[bug]()
-        #потом доделаю
 
     def update_waves(self, delta_time: float):
         """
@@ -221,26 +254,23 @@ class MyGame(arcade.Window):
         Обработка окончания волн:
         - Если все волны пройдены и нет жуков на карте -> победа
         """
-        pass
+        self.wave_timer += delta_time
 
-    def spawn_bug(self, bug_type: str):
-        """
-        Спавн одного жука
+        for bug in bugs:
+            if bug.hp <= 0:
+                bugs.remove(bug)
 
-        Параметры:
-        bug_type: str - тип жука на русском
-            • "Обычный жук"
-            • "Броненосец"
-            • "Жук-плевок"
-            • "Доминико Торетто"
-            • "Жук-харкатель"
 
-        Процесс спавна:
-        1. Создание соответствующего класса жука
-        2. Установка позиции в рандомной позиции
-        3. Добавление в bugs SpriteList
-        """
-        pass
+        if self.wave_timer >= self.waves[self.current_wave_index][0]:
+            for bug in self.waves[self.current_wave_index][2]:
+                if random.randint(0, 1):
+                    x = random.randint(0, self.map_width_pixels)
+                    y = 0
+                else:
+                    y = random.randint(0, self.map_width_pixels)
+                    x = 0
+                bugs.append(BAGS[bug]([x, y]))
+
 
     def on_draw(self):
         """
@@ -275,11 +305,12 @@ class MyGame(arcade.Window):
 
         self.world_camera.use()
 
+        bugs.draw()
+        buildings.draw()
+        if players:
+            players.draw()
 
-        # Рисуем здания
-        self.buildings.draw()
-        if self.players:
-            self.players.draw()
+        self.gui_camera.use()
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
         """
@@ -339,16 +370,13 @@ class MyGame(arcade.Window):
     def check_game_state(self):
         """
         Проверка состояния игры
-
-        Условия поражения:
-        if core.hp <= 0:
-            game_state = "game_over"
-
-        Условия победы:
-        if current_wave_index >= len(waves) and len(bugs) == 0:
-            game_state = "victory"
         """
-        pass
+        if self.core.hp <= 0:
+            self.game_state = "game_over"
+        elif self.current_wave_index >= len(self.waves) and len(bugs) == 0:
+            self.game_state = "victory"
+        elif arcade.key.ESCAPE in self.pressed_keys:
+            self.game_state = "pause"
 
     def transfer_resources(self):
         """
@@ -382,27 +410,15 @@ class MyGame(arcade.Window):
         """
         pass
 
-    def destroy_building(self, building: Building):
+    def destroy_building(self):
         """
-        Уничтожение здания и всех связанных элементов
-
-        Параметры:
-        building: Building - уничтожаемое здание
-
-        Логика:
-        1. Если это станция:
-           - Уничтожает дрона
-           - Вызывает recover_drone() для создания нового (если достаточно ресурсов)
-        2. Если это источник/приемник для дронов:
-           - Находит все дроны, которые работают с этим зданием
-           - Для каждого дрона:
-             * Удаляет из очередей
-             * Уничтожает груз
-             * Отправляет на станцию
-        3. Удаляет здание из сетки и списков
-        4. Возвращает половину стоимости в ядро
+        Уничтожение здания
         """
-        pass
+        for b in buildings:
+            if b.hp <= 0:
+                buildings.remove(b)
+
+
 
 
 #Тест
