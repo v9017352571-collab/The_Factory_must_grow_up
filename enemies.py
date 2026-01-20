@@ -1,7 +1,6 @@
 # enemies.py
 import arcade
 from typing import List, Dict, Optional, Any
-from constants import TILE_SIZE, SPRITE_SCALE
 
 
 class Bug(arcade.Sprite):
@@ -93,14 +92,6 @@ class Bug(arcade.Sprite):
 
         Параметры:
         amount: int - количество урона
-
-        Возвращает:
-        bool - True если жук умер, False если еще жив
-
-        Особенности:
-        - Уменьшает HP
-        - При смерти удаляет жука из списка
-        - Нет выпадения ресурсов при смерти (по ТЗ)
         """
 
 
@@ -287,29 +278,5 @@ class Bullet(arcade.Sprite):
 
         Логика:
         - Уменьшает время жизни на delta_time
-        - Двигается в направлении цели
-        - Проверяет столкновения с целью
-        - Удаляется при истечении времени жизни
-        """
-
-    def distance_to(self, target: arcade.Sprite) -> float:
-        pass
-        """
-        Вычисляет расстояние до цели
-
-        Параметры:
-        target: arcade.Sprite - цель для измерения расстояния
-
-        Возвращает:
-        float - расстояние в пикселях между центрами спрайтов
-        """
-
-    def hit_target(self):
-        pass
-        """
-        Обработка попадания пули в цель
-
-        Логика:
-        - Если цель имеет метод take_damage() - наносит урон
-        - Удаляет пулю после попадания
+        - Двигается в направлении цели, но вектор не меняем
         """

@@ -1,10 +1,13 @@
 # game.py
+import os
+
 import arcade
 from arcade.camera import Camera2D
 from arcade.gui import UIManager
 import math
 import random
-from constants import TILE_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, players, buildings, bugs, CAMERA_LERP
+from constants import T_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, players, buildings, bugs, \
+    CAMERA_LERP, RESOURCES, TEXTYRE
 from core import Core, ResourceCost
 from player import Player
 from buildings import (Building, ElectricDrill,
@@ -81,7 +84,7 @@ class MyGame(arcade.Window):
         # Система волн (загружается из константы WAVES)
         self.waves = WAVES
         self.current_wave_index = 0
-        self.wave_timer = 0.0
+        self.wave_timer = 120
 
         # Состояние игры
         self.game_state = "playing"
@@ -90,6 +93,8 @@ class MyGame(arcade.Window):
 
         self.player = None
         self.core = None
+        self.rote_dron = False
+        self.information_about_the_building = [0, 0, {}]
 
         # Загрузка карты и настройка
         self.map_height_pixels = None
@@ -98,6 +103,7 @@ class MyGame(arcade.Window):
         self.map_width = None
         self.map = None
         self.setup()
+        self.load_map()
 
     def load_map(self):
         """
@@ -113,12 +119,11 @@ class MyGame(arcade.Window):
         """
 
         # Создаем сетку карты
-        self.map = arcade.load_tilemap(":resources:/tiled_maps/level_1.json", scaling=0.5)
-        self.map_width = int(self.map.width)
-        self.map_height = int(self.map.height)
-        self.map_width_pixels = self.map_width * TILE_SIZE
-        self.map_height_pixels = self.map_height * TILE_SIZE
-        self.grid = [[None for _ in range(self.map_width)] for _ in range(self.map_height)]
+        self.map = arcade.load_tilemap(":resources:/tiled_maps/level_1.json")
+        self.map_width = self.map.width
+        self.map_height = self.map.height
+        self.map_width_pixels = self.map_width * T_SIZE
+        self.map_height_pixels = self.map_height * T_SIZE
 
     def setup_ui(self):
         """
@@ -137,6 +142,7 @@ class MyGame(arcade.Window):
         Каждая кнопка привязана к обработчику событий для соответствующего действия.
         """
         pass
+
     def setup(self):
         """
         Полная инициализация игры после создания окна
@@ -155,8 +161,6 @@ class MyGame(arcade.Window):
         buildings.append(self.core)
         self.player = Player("Изображения\Остальное\Нгг.png", SPRITE_SCALE, self.core)
         players.append(self.player)
-        self.wave_timer = self.waves[0][0]
-        self.cam_target = (self.player.center_x, self.player.center_y)
 
     def cam(self):
         cam_x, cam_y = self.world_camera.position
@@ -178,10 +182,10 @@ class MyGame(arcade.Window):
             target_y = py - 50 // 2
 
         # Не показываем «пустоту» за краями карты
-        half_w = self.world_camera.viewport_width / 2
-        half_h = self.world_camera.viewport_height / 2
-        target_x = max(half_w, min(self.map_width_pixels - half_w, target_x))
-        target_y = max(half_h, min(self.map_height_pixels - half_h, target_y))
+        half_w = int(self.world_camera.viewport_width / 2)
+        half_h = int(self.world_camera.viewport_height / 2)
+        target_x = max(half_w, min(int(self.map_width_pixels) - half_w, target_x))
+        target_y = max(half_h, min(int(self.map_height_pixels) - half_h, target_y))
 
         # Плавно к цели
         smooth_x = (1 - CAMERA_LERP) * cam_x + CAMERA_LERP * target_x
@@ -235,7 +239,7 @@ class MyGame(arcade.Window):
         )
         self.update_waves(delta_time)
         self.destroy_building()
-
+        self.drone_destruction()
 
     def update_waves(self, delta_time: float):
         """
@@ -254,22 +258,24 @@ class MyGame(arcade.Window):
         Обработка окончания волн:
         - Если все волны пройдены и нет жуков на карте -> победа
         """
-        self.wave_timer += delta_time
+        self.wave_timer -= delta_time
 
         for bug in bugs:
             if bug.hp <= 0:
                 bugs.remove(bug)
 
 
-        if self.wave_timer >= self.waves[self.current_wave_index][0]:
-            for bug in self.waves[self.current_wave_index][2]:
+        if self.wave_timer <= 0:
+            for bug in self.waves[self.current_wave_index]:
                 if random.randint(0, 1):
                     x = random.randint(0, self.map_width_pixels)
                     y = 0
                 else:
-                    y = random.randint(0, self.map_width_pixels)
+                    y = random.randint(0, self.map_height_pixels)
                     x = 0
-                bugs.append(BAGS[bug]([x, y]))
+                bugs.append(BAGS[bug](x, y))
+                WAVES.remove(self.current_wave_index)
+            self.wave_timer = 100
 
 
     def on_draw(self):
@@ -302,8 +308,8 @@ class MyGame(arcade.Window):
         • минимальное количество draw calls
         """
         self.clear()
-
         self.world_camera.use()
+
 
         bugs.draw()
         buildings.draw()
@@ -311,29 +317,97 @@ class MyGame(arcade.Window):
             players.draw()
 
         self.gui_camera.use()
+    def on_mouse_motion(self, x, y, dx, dy):
+        x1, y1 = self.world_camera.position
+        x2 = (x + x1) // 16
+        y2 = (y + y1) // 16
+        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        if dx + dy <= 1:
+            if x3 != self.information_about_the_building[0] or y3 != self.information_about_the_building[1]:
+                for i in buildings:
+                    if i.center_x == x and i.center_y == y:
+                        self.information_about_the_building[2] = i.resources
+                        print(i.resources)
+                        return
+        # print(x3, y3)
+        print(self.core.center_x, self.core.center_y)
+        print(x3, y3)
+
+
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
         """
-        Обработка нажатия мыши
-
-        Преобразование координат:
-        world_x = x + world_camera.position[0]
-        world_y = y + world_camera.position[1]
-
-        Логика обработки:
-        1. Проверка UI элементов
-        2. Режим сноса зданий
-        3. Выбор типа здания
-        4. Программирование дронов (режим трех кликов)
-        5. Двойной клик по станции для переназначения
-
-        Важные ограничения:
-        • Нельзя снести ядро
-        • Нельзя построить на занятом месте
-        • Нельзя построить без ресурсов
-        • Нельзя программировать без станции
+        Обработка постройки зданий, сноса зданий, создания дронов с маршрутами
+        и уничтожение дронов кликом.
         """
-        pass
+        #Постройка зданий
+        if arcade.MOUSE_BUTTON_LEFT == button:
+            self.build_building(x, y)
+
+        #Создаем маршрут с дронами
+        elif arcade.MOUSE_BUTTON_RIGHT == button: #Проверять кол рес
+            self.f_rote_dron(x, y)
+
+        #Удаляем дрон
+        elif arcade.MOUSE_BUTTON_MIDDLE == button:
+            self.del_dron(x, y)
+
+
+    def build_building(self, x, y):
+        x1, y1 = self.world_camera.position
+        x2 = (x + x1) // 16
+        y2 = (y + y1) // 16
+        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        for i in self.pressed_keys:
+            building = BUILDING_KEYS.get(i)
+            if building:
+                buildings.append(building(x3, y3))
+                return
+
+            # Снос зданий
+
+            if arcade.key.DELETE == i:
+                for u in buildings:
+                    if u.max_hp != 20:
+                        if u.center_x == x3 and u.center_y == y3:
+                            buildings.remove(u)
+                            for res in u.cost:
+                                u.cost[res] = int(u.cost[res] / 2)
+                            return
+
+    def f_rote_dron(self, x, y):
+        x1, y1 = self.world_camera.position
+        x2 = (x + x1) // 16
+        y2 = (y + y1) // 16
+        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        b = buildings.remove(self.core)
+        if self.core.center_x == x3 and self.core.center_y == y3:
+            self.rote_dron = True
+            return
+        for t in b:
+            if self.rote_dron and t.center_x == x3 and t.center_y == y3:
+                if self.rote_dron != True:
+                    players.append(Drone(self.rote_dron.append(t)))
+                    self.rote_dron = False
+                    self.core.add_resource("Кремний", -3)
+                    self.core.add_resource("Медь", -2)
+                    self.core.add_resource("Олово", -1)
+                    return
+                else:
+                    self.rote_dron = [t]
+                    return
+
+    def del_dron(self, x, y):
+        x1, y1 = self.world_camera.position
+        pl = players.remove(self.player)
+        for dr in pl:
+            if (x + x1) - dr.center_x < 5 and (y + y1) - dr.center_y < 5:
+                players.remove(dr)
+                self.core.add_resource("Кремний", 2)
+                self.core.add_resource("Медь", 2)
+                break
+
+
 
     def on_key_press(self, key: int, modifiers: int):
         """
@@ -417,6 +491,14 @@ class MyGame(arcade.Window):
         for b in buildings:
             if b.hp <= 0:
                 buildings.remove(b)
+
+    def drone_destruction(self):
+        """
+        Уничтожение дронов
+        """
+        for b in players:
+            if b.hp <= 0:
+                players.remove(b)
 
 
 
