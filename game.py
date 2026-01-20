@@ -318,7 +318,7 @@ class MyGame(arcade.Window):
 
         self.gui_camera.use()
     def on_mouse_motion(self, x, y, dx, dy):
-        x1, y1 = self.world_camera.position
+        x1, y1 = self.world_camera.bottom_left
         x2 = (x + x1) // 16
         y2 = (y + y1) // 16
         x3, y3 = x2 * 16 + 8, y2 * 16 + 8
@@ -329,9 +329,9 @@ class MyGame(arcade.Window):
                         self.information_about_the_building[2] = i.resources
                         print(i.resources)
                         return
-        # print(x3, y3)
-        print(self.core.center_x, self.core.center_y)
         print(x3, y3)
+        print(x1, y1)
+        print(self.core.center_x, self.core.center_y)
 
 
 
@@ -354,12 +354,15 @@ class MyGame(arcade.Window):
 
 
     def build_building(self, x, y):
-        x1, y1 = self.world_camera.position
+        x1, y1 = self.world_camera.bottom_left
         x2 = (x + x1) // 16
         y2 = (y + y1) // 16
         x3, y3 = x2 * 16 + 8, y2 * 16 + 8
         for i in self.pressed_keys:
             building = BUILDING_KEYS.get(i)
+            for e in buildings:
+                if e.center_x == x3 and e.center_y == y3:
+                    return
             if building:
                 buildings.append(building(x3, y3))
                 return
@@ -376,7 +379,7 @@ class MyGame(arcade.Window):
                             return
 
     def f_rote_dron(self, x, y):
-        x1, y1 = self.world_camera.position
+        x1, y1 = self.world_camera.bottom_left
         x2 = (x + x1) // 16
         y2 = (y + y1) // 16
         x3, y3 = x2 * 16 + 8, y2 * 16 + 8
@@ -398,7 +401,7 @@ class MyGame(arcade.Window):
                     return
 
     def del_dron(self, x, y):
-        x1, y1 = self.world_camera.position
+        x1, y1 = self.gui_camera.bottom_left
         pl = players.remove(self.player)
         for dr in pl:
             if (x + x1) - dr.center_x < 5 and (y + y1) - dr.center_y < 5:
