@@ -1,5 +1,6 @@
 # main.py
 import arcade
+from database import init_database
 from menu import StartMenuWindow
 
 
@@ -17,6 +18,7 @@ def main():
     - Заголовок: "Заводы и Тауэр Дефенс"
     - Автоматический выход при закрытии окна
     """
+    init_database()
     window = StartMenuWindow(800, 600, "Заводы и Тауэр Дефенс")
     arcade.run()
 
