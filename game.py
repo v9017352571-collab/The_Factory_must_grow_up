@@ -318,10 +318,10 @@ class MyGame(arcade.Window):
 
         self.gui_camera.use()
     def on_mouse_motion(self, x, y, dx, dy):
-        x1, y1 = self.world_camera.position
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x1, y1 = self.world_camera.bottom_left
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
         if dx + dy <= 1:
             if x3 != self.information_about_the_building[0] or y3 != self.information_about_the_building[1]:
                 for i in buildings:
@@ -355,9 +355,9 @@ class MyGame(arcade.Window):
 
     def build_building(self, x, y):
         x1, y1 = self.world_camera.position
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
         for i in self.pressed_keys:
             building = BUILDING_KEYS.get(i)
             if building:
@@ -377,9 +377,9 @@ class MyGame(arcade.Window):
 
     def f_rote_dron(self, x, y):
         x1, y1 = self.world_camera.position
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
         b = buildings.remove(self.core)
         if self.core.center_x == x3 and self.core.center_y == y3:
             self.rote_dron = True
