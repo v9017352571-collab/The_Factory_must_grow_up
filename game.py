@@ -319,9 +319,9 @@ class MyGame(arcade.Window):
         self.gui_camera.use()
     def on_mouse_motion(self, x, y, dx, dy):
         x1, y1 = self.world_camera.bottom_left
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
         if dx + dy <= 1:
             if x3 != self.information_about_the_building[0] or y3 != self.information_about_the_building[1]:
                 for i in buildings:
@@ -329,9 +329,9 @@ class MyGame(arcade.Window):
                         self.information_about_the_building[2] = i.resources
                         print(i.resources)
                         return
-        print(x3, y3)
-        print(x1, y1)
+        # print(x3, y3)
         print(self.core.center_x, self.core.center_y)
+        print(x3, y3)
 
 
 
@@ -354,10 +354,10 @@ class MyGame(arcade.Window):
 
 
     def build_building(self, x, y):
-        x1, y1 = self.world_camera.bottom_left
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x1, y1 = self.world_camera.position
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
         for i in self.pressed_keys:
             building = BUILDING_KEYS.get(i)
             for e in buildings:
@@ -380,9 +380,10 @@ class MyGame(arcade.Window):
 
     def f_rote_dron(self, x, y):
         x1, y1 = self.world_camera.bottom_left
-        x2 = (x + x1) // 16
-        y2 = (y + y1) // 16
-        x3, y3 = x2 * 16 + 8, y2 * 16 + 8
+        x2 = (x + x1) // T_SIZE
+        y2 = (y + y1) // T_SIZE
+        x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
+
         b = buildings.remove(self.core)
         if self.core.center_x == x3 and self.core.center_y == y3:
             self.rote_dron = True
@@ -513,3 +514,96 @@ def main():
 
 if __name__ == "__main__":
     main()
+        self.buildings = arcade.SpriteList()
+        self.bullets = arcade.SpriteList()
+        self.bugs = arcade.SpriteList()
+        self.drones = arcade.SpriteList()
+        self.grid = None
+
+        def calculate_level_stats(self) -> Dict[str, Any]:
+            """Вычисление статистики для текущего уровня"""
+            return {
+                'level_number': self.current_level,
+                'score': self.calculate_score(),
+                'enemies_killed': self.enemies_killed,
+                'time_spent': self.game_time,
+                'waves_completed': self.current_wave_index,
+                'resources_collected': self.calculate_resources_collected(),
+                'buildings_built': len(self.buildings),
+                'drones_used': len(self.drones)
+            }
+
+        def on_victory(self):
+            """Вызывается при победе на уровне"""
+            level_stats = self.calculate_level_stats()
+
+            # Сохраняем в общую статистику
+            self.game_stats.add_level_result(level_stats)
+
+            # Показываем соответствующее окно
+            from menu import show_level_complete, show_final_results
+
+            total_levels = 5  # Всего уровней в игре
+
+            if self.current_level < total_levels:
+                # Показываем окно завершения уровня
+                show_level_complete(
+                    level_data=level_stats,
+                    user_id=self.current_user_id,
+                    username=self.current_user
+                )
+            else:
+                # Показываем финальное окно
+                total_stats = self.game_stats.get_total_stats()
+                show_final_results(
+                    total_stats=total_stats,
+                    user_id=self.current_user_id,
+                    username=self.current_user
+                )
+
+        def on_defeat(self, reason: str = "Ядро разрушено"):
+            """Вызывается при поражении"""
+            from menu import show_game_over
+
+            stats = {
+                'score': self.calculate_score(),
+                'enemies_killed': self.enemies_killed,
+                'time_survived': self.game_time,
+                'waves_completed': self.current_wave_index
+            }
+
+            show_game_over(
+                level_number=self.current_level,
+                reason=reason,
+                stats=stats,
+                user_id=self.current_user_id
+            )
+
+
+class GameStats:
+    """Класс для хранения и обработки статистики игры"""
+
+    def __init__(self):
+        self.level_results = []
+        self.total_score = 0
+        self.total_enemies_killed = 0
+        self.total_play_time = 0.0
+        self.levels_completed = 0
+
+    def add_level_result(self, level_stats: Dict[str, Any]):
+        """Добавляет результат уровня"""
+        self.level_results.append(level_stats)
+        self.total_score += level_stats.get('score', 0)
+        self.total_enemies_killed += level_stats.get('enemies_killed', 0)
+        self.total_play_time += level_stats.get('time_spent', 0)
+        self.levels_completed += 1
+
+    def get_total_stats(self) -> Dict[str, Any]:
+        """Возвращает общую статистику"""
+        return {
+            'total_score': self.total_score,
+            'total_enemies_killed': self.total_enemies_killed,
+            'total_play_time': self.total_play_time,
+            'levels_completed': self.levels_completed,
+            'level_results': self.level_results
+        }
