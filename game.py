@@ -4,8 +4,13 @@ from arcade.camera import Camera2D
 from arcade.gui import UIManager
 import math
 import random
+
+from arcade.math import rand_in_circle, rand_on_circle
+from arcade.particles import Emitter, EmitBurst, LifetimeParticle
+
 from constants import T_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, players, buildings, bugs, \
-    CAMERA_LERP, RESOURCES, TEXTYRE
+    CAMERA_LERP, RESOURCES, TEXTYRE, MUSIC_MENU, MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_ATTACKS1, MUSIC_UNITED3, \
+    MUSIC_ATTACKS2, MUSIC_ATTACKS3, good_bullet, bad_bullet, HIT
 from core import Core, ResourceCost
 from player import Player
 from buildings import (Building, ElectricDrill,
@@ -18,60 +23,6 @@ class MyGame(arcade.Window):
     """Основной класс игры - управляет всем игровым процессом"""
 
     def __init__(self, width: int, height: int, title: str):
-        """
-        Инициализация игры
-
-        Параметры:
-        width: int - ширина окна в пикселях
-        height: int - высота окна в пикселях
-        title: str - заголовок окна
-
-        Атрибуты инициализации:
-        self.width/height: int - размеры окна
-        self.title: str - заголовок
-
-        Атрибуты камер:
-        self.world_camera: Camera2D - камера для игрового мира (следует за игроком)
-        self.gui_camera: Camera2D - камера для UI (фиксированная, не двигается)
-
-        Игровые сущности:
-        self.player: Player - космический корабль игрока
-        self.core: Core - ядро, которое нужно защитить
-        self.buildings: arcade.SpriteList - все здания в игре
-        self.bullets: arcade.SpriteList - все пули (турелей и жуков)
-        self.bugs: arcade.SpriteList - все враги
-        self.drones: arcade.SpriteList - все дроны
-
-        Параметры карты (берутся из константы JSON):
-        self.map_width: int - ширина карты в калетках
-        self.map_height: int - высота карты в клетках
-        self.map_width_pixels: int - ширина карты в пикселях
-        self.map_height_pixels: int - высота карты в пикселях
-
-        Система волн (берется из константы WAVES):
-        self.waves: List[List[Any]] - расписание волн [[время_до_волны, [типы_жуков]], ...]
-        self.current_wave_index: int - индекс текущей волны
-        self.wave_timer: float - таймер до следующей волны в секундах
-
-        Система строительства:
-        self.selected_building_type: Optional[str] = None - выбранный тип здания для постройки
-        self.delete_mode: bool = False - режим сноса зданий
-        Тут я пока не до конца понимаю что делать
-        self.programming_station: Optional[DroneStation] = None - ядро в режиме программирования
-        self.programming_step: int = 0 - шаг программирования (0-неактивно, 1-выбран источник, 2-выбран приемник)
-        self.programming_source: Optional[Building] = None - источник для программирования
-        self.programming_destination: Optional[Building] = None - приемник для программирования
-
-        Состояние игры:
-        self.game_state: str = "playing" - текущее состояние ('playing', 'game_over', 'victory')
-        self.hovered_building: Optional[Building] = None - здание под курсором для отображения информации
-        self.pressed_keys: set = set() - множество нажатых клавиш для обработки движения
-
-        UI система:
-        self.ui_manager: UIManager - менеджер пользовательского интерфейса
-        self.info_text: str = "" - текст информации для отображения
-        self.info_position: Tuple[float, float] = (0, 0) - позиция текста информации
-        """
         super().__init__(width, height, title)
 
         # Инициализация камер и т.п.
@@ -82,7 +33,7 @@ class MyGame(arcade.Window):
         # Система волн (загружается из константы WAVES)
         self.waves = WAVES
         self.current_wave_index = 0
-        self.wave_timer = 120
+        self.wave_timer = 100
 
         # Состояние игры
         self.game_state = "playing"
@@ -108,6 +59,9 @@ class MyGame(arcade.Window):
         self.drones = arcade.SpriteList()
         self.grid = None
         self.resource_icons = arcade.SpriteList()
+        self.emitters = []
+        self.star_texture = arcade.load_texture("Изображения\Остальное\Пуля.png")
+        self.orb_texture = arcade.load_texture("Изображения\Остальное\Камень.png")
 
 
         def calculate_level_stats(self):
@@ -228,6 +182,8 @@ class MyGame(arcade.Window):
         buildings.append(self.core)
         self.player = Player("Изображения\Остальное\Нгг.png", SPRITE_SCALE, self.core)
         players.append(self.player)
+        self.ost = arcade.play_sound(random.choice([MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_UNITED3]))
+        self.ost_UNITED = True
         self.setup_ui()
 
     def cam(self):
@@ -305,9 +261,15 @@ class MyGame(arcade.Window):
             position,
             0.5,  # Плавность следования камеры
         )
+        for emitter in self.emitters:
+            emitter.update()
+        # Удаляем пустые эмиттеры
+        self.emitters = [e for e in self.emitters if e.get_count() > 0]
         self.update_waves(delta_time)
         self.destroy_building()
         self.drone_destruction()
+        self.bullet_b()
+        self.bullet_g()
 
     def update_waves(self, delta_time: float):
         """
@@ -332,7 +294,6 @@ class MyGame(arcade.Window):
             if bug.hp <= 0:
                 bugs.remove(bug)
 
-
         if self.wave_timer <= 0:
             for bug in self.waves[self.current_wave_index]:
                 if random.randint(0, 1):
@@ -344,6 +305,70 @@ class MyGame(arcade.Window):
                 bugs.append(BAGS[bug](x, y))
                 WAVES.remove(self.current_wave_index)
             self.wave_timer = 100
+            arcade.stop_sound(self.ost)
+            self.ost = arcade.play_sound(random.choice([MUSIC_ATTACKS2, MUSIC_ATTACKS1, MUSIC_ATTACKS3]), volume=True)
+            self.ost_UNITED = False
+
+        if len(BAGS) <= 5:
+            if not self.ost_UNITED:
+                arcade.stop_sound(self.ost)
+                self.ost = arcade.play_sound(random.choice([MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_UNITED3]), volume=True)
+                self.ost_UNITED = True
+
+    def bullet_g(self):
+        for b in good_bullet:
+            if b.lifetime <= 0:
+                good_bullet.remove(b)
+            else:
+                hit_list = arcade.check_for_collision_with_list(b, bugs)
+                if hit_list:
+                    for i in hit_list:
+                        self.create_explosion(b.center_x, b.center_y)
+                        i.take_damage(b.damage)
+                        good_bullet.remove(b)
+                        arcade.play_sound(random.choice(HIT))
+
+
+
+    def bullet_b(self):
+        for b in bad_bullet:
+            if b.lifetime <= 0:
+                bad_bullet.remove(b)
+            else:
+                hit_list = arcade.check_for_collision_with_list(b, players)
+                if hit_list:
+                    for i in hit_list:
+                        self.create_explosion(b.center_x, b.center_y)
+                        i.take_damage(b.damage)
+                        bad_bullet.remove(b)
+                        arcade.play_sound(random.choice(HIT))
+        for b in bad_bullet:
+            if b.lifetime <= 0:
+                bad_bullet.remove(b)
+            else:
+                hit_list = arcade.check_for_collision_with_list(b, buildings)
+                if hit_list:
+                    for i in hit_list:
+                        self.create_explosion(b.center_x, b.center_y)
+                        i.take_damage(b.damage)
+                        bad_bullet.remove(b)
+                        arcade.play_sound(random.choice(HIT))
+
+
+    def create_explosion(self, x, y):
+        # Основной эмиттер со звездами
+        explosion_emitter = Emitter(
+            center_xy=(x, y),
+            emit_controller=EmitBurst(30),
+            particle_factory=lambda emitter: LifetimeParticle(
+                filename_or_texture=self.star_texture,
+                change_xy=rand_in_circle((0, 0), 8.0),
+                lifetime=random.uniform(0.01, 0.2),
+                scale=random.uniform(0.1, 0.15),
+                alpha=random.randint(25, 50)
+            )
+        )
+        self.emitters.append(explosion_emitter)
 
 
     def on_draw(self):
@@ -382,21 +407,34 @@ class MyGame(arcade.Window):
         buildings.draw()
         if players:
             players.draw()
+        for emitter in self.emitters:
+            emitter.draw()
 
         self.gui_camera.use()
 
     def ui_dr(self):
-        """Обновление и отрисовка UI каждый кадр"""
-        window = self.world_camera
+        """Обновление и отрисовки UI каждый кадр с учетом камеры"""
+        # Получаем размеры окна
+        window = arcade.get_window()
+        screen_width = window.width
+        screen_height = window.height
 
+        # Очистка SpriteList перед обновлением
+        self.resource_icons.clear()
 
-        # Обновление и отрисовка таймера волны
+        # Вычисляем позиции относительно камеры
+        camera_left = self.world_camera.bottom_left[0]
+        camera_bottom = self.world_camera.bottom_left[1]
+
+        # 1. Позиционирование таймера волны (по центру сверху экрана)
+        self.wave_timer_text.x = camera_left + screen_width // 2
+        self.wave_timer_text.y = camera_bottom + screen_height - 20
         self.wave_timer_text.text = str(int(self.wave_timer))
         self.wave_timer_text.draw()
 
-        # Отступы для ресурсов
+        # 2. Позиционирование ресурсов (справа экрана)
         right_margin = 60
-        start_y = window.height - 60
+        start_y = screen_height - 60  # Отступ сверху
         vertical_spacing = 45
 
         # Отрисовка ресурсов только если они есть
@@ -404,34 +442,43 @@ class MyGame(arcade.Window):
             resources = self.information_about_the_building
 
             for i, (resource_name, amount) in enumerate(resources.items()):
-                y_pos = start_y - i * vertical_spacing
+                # Вычисляем позицию в мировых координатах с учетом камеры
+                screen_y = screen_height - 60 - i * vertical_spacing
+                world_y = camera_bottom + screen_y
+
+                # Позиция для иконки (справа)
+                icon_x = camera_left + screen_width - right_margin
+                icon_y = world_y
+
+                # Позиция для текста количества (слева от иконки)
+                text_x = camera_left + screen_width - right_margin - 40
+                text_y = world_y
 
                 # 1. Создание иконки ресурса
                 if resource_name in TEXTYRE:
-                    # Создаем спрайт
                     sprite = arcade.Sprite(TEXTYRE[resource_name])
-                    sprite.center_x = window.width - right_margin
-                    sprite.center_y = y_pos
+                    sprite.center_x = icon_x
+                    sprite.center_y = icon_y
                     sprite.scale = 0.25  # Масштаб 0.25
                     self.resource_icons.append(sprite)
 
-                # 2. Отрисовка количества
+                # 2. Обновление/создание текста количества
                 if resource_name not in self.resource_count_texts:
                     self.resource_count_texts[resource_name] = arcade.Text(
                         text=str(amount),
-                        x=window.width - right_margin - 40,
-                        y=y_pos,
+                        x=text_x,
+                        y=text_y,
                         color=arcade.color.WHITE,
                         font_size=18,
                         anchor_x="center",
                         anchor_y="center"
                     )
                 else:
-                    self.resource_count_texts[resource_name].text = str(amount)
-                    self.resource_count_texts[resource_name].x = window.width - right_margin - 40
-                    self.resource_count_texts[resource_name].y = y_pos
-
-                self.resource_count_texts[resource_name].draw()
+                    text_widget = self.resource_count_texts[resource_name]
+                    text_widget.text = str(amount)
+                    text_widget.x = text_x
+                    text_widget.y = text_y
+                    text_widget.draw()
 
         # Отрисовка всех иконок ресурсов
         self.resource_icons.draw()
@@ -574,7 +621,9 @@ class MyGame(arcade.Window):
         """
         for b in buildings:
             if b.hp <= 0:
+                self.create_explosion_del(b.center_x, b.center_y)
                 buildings.remove(b)
+
 
     def drone_destruction(self):
         """
@@ -582,14 +631,30 @@ class MyGame(arcade.Window):
         """
         for b in players:
             if b.hp <= 0:
-                players.remove(b)
+                if b.max_hp != 3:
+                    players.remove(b)
+                else:
+                    b.start_respawn()
+
+    def create_explosion_del(self, x, y):
+        ring_emitter = Emitter(
+            center_xy=(x, y),
+            emit_controller=EmitBurst(30),
+            particle_factory=lambda emitter: LifetimeParticle(
+                filename_or_texture=self.orb_texture,
+                change_xy=rand_on_circle((0, 0), random.uniform(0.2, 4)),
+                lifetime=random.uniform(0.1, 0.4),
+                scale=random.uniform(0.02, 0.1),
+                alpha=80
+            )
+        )
 
 
 
 
 #Тест
 def main():
-    window = MyGame(500, 500, "Заводы и Тауэр Дефенс")
+    window = MyGame(1000, 800, "Заводы и Тауэр Дефенс")
     arcade.run()
 
 if __name__ == "__main__":

@@ -105,3 +105,23 @@ BAGS = {
     "Жук Доминико Торетто": DominicTorettoBeetle,
     "Жук-харкатель": HarkerBeetle
         }
+
+MUSIC_MENU = arcade.load_sound('OST\Меню\ДляМеню.mp3')
+MUSIC_ATTACKS1 = arcade.load_sound('OST\Атака\Атака1.mp3')
+MUSIC_ATTACKS2 = arcade.load_sound("OST\Атака\Атака2.mp3")
+MUSIC_ATTACKS3 = arcade.load_sound("OST\Атака\Атака3.mp3")
+MUSIC_UNITED1 = arcade.load_sound("OST\Обычная\Обычная1.mp3")
+MUSIC_UNITED2 = arcade.load_sound("OST\Обычная\Обычная2.mp3")
+MUSIC_UNITED3 = arcade.load_sound("OST\Обычная\Обычная3.mp3")
+HIT = [arcade.load_sound("Стрельба\Поподание\п1.mp3"), arcade.load_sound("Стрельба\Поподание\п2.mp3"),
+       arcade.load_sound("Стрельба\Поподание\п3.mp3"), arcade.load_sound("Стрельба\Поподание\п4.mp3"),
+       arcade.load_sound("Стрельба\Поподание\п5.mp3"), arcade.load_sound("Стрельба\Поподание\п6.mp3"),
+       arcade.load_sound("Стрельба\Поподание\п7.mp3")]
+SOUND_COPPER_TURRET = [arcade.load_sound("Стрельба\Турель\Медная\т1.mp3"),
+                       arcade.load_sound("Стрельба\Турель\Медная\т2.mp3"),
+                       arcade.load_sound("Стрельба\Турель\Медная\т3.mp3")]
+SOUND_BRONZE_TURRET = [arcade.load_sound("Стрельба\Турель\Бронзавая\т1.mp3"),
+                       arcade.load_sound("Стрельба\Турель\Бронзавая\т2.mp3")]
+SOUND_LONG_BARRELED_TURRET = [arcade.load_sound("Стрельба\Турель\Длинноствольная\т1.mp3"),
+                       arcade.load_sound("Стрельба\Турель\Длинноствольная\т2.mp3"),
+                       arcade.load_sound("Стрельба\Турель\Длинноствольная\т3.mp3")]
