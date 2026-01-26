@@ -3,7 +3,9 @@ import arcade
 from typing import Dict, List, Optional, Any, Deque
 from collections import deque
 from core import ResourceCost
-import random
+import random, math
+
+from constants import *
 T_SIZE = 16
 BUILDING_HP = {
     "Дрон-станция": 5,
@@ -82,7 +84,6 @@ class Building(arcade.Sprite):
             self.resource_capacity = {}
 
     def take_damage(self, amount: int):
-        pass
         """
         Наносит урон зданию
 
@@ -96,9 +97,14 @@ class Building(arcade.Sprite):
         - Все дроны в очередях получают уведомление о разрушении
         - Не позволяет HP быть меньше 0
         """
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            # Уведомить game/core об удалении здания (kill())
+            if hasattr(self, 'core'):
+                self.core.building_destroyed(self)  # Если есть колбэк
 
     def can_accept(self, resource_type: str) -> bool:
-        pass
         """
         Проверяет, может ли здание принять ресурс
 
@@ -114,9 +120,13 @@ class Building(arcade.Sprite):
         - Если здание уже заполнено этим ресурсом - не может принять
         - Для производственных зданий - не может принять свой выходной ресурс
         """
+        if self.infinitestorage:
+            return True
+        if resource_type not in self.resourcecapacity:
+            return False
+        return self.resources.get(resource_type, 0) < self.resourcecapacity[resource_type]
 
     def accept_resource(self, resource_type: str) -> bool:
-        pass
         """
         Принимает ресурс в здание
 
@@ -131,9 +141,12 @@ class Building(arcade.Sprite):
         - Увеличивает счетчик ресурса
         - Если есть дроны в waiting_for_unload - пробует отдать им ресурсы
         """
+        if not self.can_accept(resource_type):
+            return False
+        self.resources[resource_type] = self.resources.get(resource_type, 0) + 1
+        return True
 
     def has_resource(self, resource_type: str) -> bool:
-        pass
         """
         Проверяет наличие ресурса в здании
 
@@ -143,9 +156,9 @@ class Building(arcade.Sprite):
         Возвращает:
         bool - True если есть хотя бы один ресурс, False если нет
         """
+        return self.resources.get(resource_type, 0) > 0
 
     def consume_resource(self, resource_type: str, amount: int = 1) -> bool:
-        pass
         """
         Потребляет ресурс из здания
 
@@ -161,9 +174,14 @@ class Building(arcade.Sprite):
         - Уменьшает количество на amount
         - Если ресурса не хватает - возвращает False
         """
+        if not self.has_resource(resource_type):
+            return False
+        self.resources[resource_type] -= amount
+        if self.resources[resource_type] < 0:
+            self.resources[resource_type] = 0
+        return True
 
     def add_drone_to_queue(self, drone: 'Drone'):
-        pass
         """
         Добавляет дрона в очередь ожидания ресурсов
 
@@ -174,9 +192,9 @@ class Building(arcade.Sprite):
         - Добавляет дрона в waiting_drones
         - Дрон будет ждать в очереди, пока не получит ресурс
         """
+        self.waiting_drones.append(drone)
 
     def add_drone_for_unload(self, drone: 'Drone'):
-        pass
         """
         Добавляет дрона в очередь ожидания разгрузки
 
@@ -187,9 +205,9 @@ class Building(arcade.Sprite):
         - Добавляет дрона в waiting_for_unload
         - Дрон будет ждать в очереди, пока не сможет отдать ресурс
         """
+        self.waiting_for_unload.append(drone)
 
     def process_queues(self, delta_time: float):
-        pass
         """
         Обрабатывает очереди дронов
 
@@ -207,9 +225,28 @@ class Building(arcade.Sprite):
           * Если операция успешна - удаляет дрона из очереди
           * Если неуспешна - дрон остается в очереди
         """
+        while self.waiting_for_unload:
+            drone = self.waiting_for_unload[0]
+            if self.distance_to(drone) < DRONE_DROP_DISTANCE:  # arcade.distance_to или math.hypot
+                if drone.cargo and self.accept_resource(drone.cargo):
+                    drone.cargo = None
+                    self.waiting_for_unload.popleft()
+                else:
+                    break
+            else:
+                break
+            # Загрузка дронов
+        while self.waiting_drones and self.can_give_resource():
+            drone = self.waiting_drones[0]
+            if self.distance_to(drone) < DRONE_PICKUP_DISTANCE:
+                if drone.take_resource(self):  # Метод дрона
+                    self.waiting_drones.popleft()
+                else:
+                    break
+            else:
+                break
 
     def can_give_resource(self) -> bool:
-        pass
         """
         Проверяет, может ли здание отдать ресурс
 
@@ -221,6 +258,11 @@ class Building(arcade.Sprite):
         - Для буров: проверяет наличие добытого ресурса
         - Для ядра: всегда True (бесконечное хранилище)
         """
+        return self.outputresource is not None and self.hasresource(self.outputresource)
+
+    def distance_to(self, target):
+        """измерение расстояния до target"""
+        return ((self.center_x - target.center_x) ** 2 + (self.center_y - target.center_y) ** 2) ** 0.5
 
 
 class MineDrill(Building):
@@ -269,7 +311,6 @@ class MineDrill(Building):
         self.production_timer = 0.0
 
     def update(self, delta_time: float):
-        pass
         """
         Обновление состояния бура
 
@@ -284,9 +325,12 @@ class MineDrill(Building):
         - Сбрасывает таймер
         - Обрабатывает очереди дронов
         """
+        self.production_timer += delta_time
+        if self.production_timer >= self.production_time:
+            self.produce_resource()
+            self.production_timer = 0.0
 
     def produce_resource(self):
-        pass
         """
         Добывает ресурс с клетки
 
@@ -297,19 +341,9 @@ class MineDrill(Building):
         - Если нет места - ресурс не добывается (теряется)
         - После производства вызывает can_give_resource() для проверки
         """
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли бур отдать ресурс
-
-        Возвращает:
-        bool - True если есть добытый ресурс, False если нет
-
-        Логика:
-        - Проверяет наличие cell_resource в ресурсах
-        - Возвращает True если количество > 0
-        """
+        if self.cell_resource in self.core.map_resources:  # Добыча из карты
+            self.core.map_resources[self.cell_resource] -= 1  # Уменьшить на карте
+            self.accept_resource(self.cell_resource)
 
 
 class ElectricDrill(MineDrill):
@@ -389,7 +423,6 @@ class ProductionBuilding(Building):
         self.can_produce = False
 
     def update(self, delta_time: float):
-        pass
         """
         Обновление состояния производства
 
@@ -403,9 +436,12 @@ class ProductionBuilding(Building):
         - Сбрасывает таймер после производства
         - Обрабатывает очереди дронов
         """
+        self.production_timer += delta_time
+        if self.has_all_inputs() and self.production_timer >= self.production_time:
+            self.produce_output()
+            self.production_timer = 0.0
 
     def has_all_inputs(self) -> bool:
-        pass
         """
         Проверяет наличие всех необходимых ресурсов для производства
 
@@ -417,9 +453,12 @@ class ProductionBuilding(Building):
         - Для каждого ресурса проверяет количество
         - Возвращает False при первой нехватке
         """
+        for res, amt in self.input_resources.items():
+            if self.resources.get(res, 0) < amt:
+                return False
+        return True
 
     def produce_output(self):
-        pass
         """
         Производит выходной ресурс
 
@@ -429,19 +468,10 @@ class ProductionBuilding(Building):
         - Добавляет выходной ресурс во внутреннее хранилище
         - Сбрасывает таймер производства
         """
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли здание отдать ресурс
-
-        Возвращает:
-        bool - True если есть выходной ресурс, False если нет
-
-        Логика:
-        - Проверяет наличие output_resource в ресурсах
-        - Возвращает True если количество > 0
-        """
+        if self.has_all_inputs():
+            for res, amt in self.input_resources.items():
+                self.consume_resource(res, amt)
+            self.accept_resource(self.output_resource)
 
 
 class BronzeFurnace(ProductionBuilding):
@@ -602,7 +632,6 @@ class Turret(Building):
         self.target = None
 
     def update(self, delta_time: float):
-        pass
         """
         Обновление состояния турели
 
@@ -616,9 +645,16 @@ class Turret(Building):
         - Обновляет все пули в bullet_list
         - Обрабатывает очереди дронов
         """
+        self.bullet_list.update()  # Обновить пули
+        self.current_cooldown = max(0, self.current_cooldown - delta_time)
+        if self.has_ammo():
+            self.find_target()
+            if self.target and self.distance_to(self.target) <= self.rangeseconds * T_SIZE:
+                if self.current_cooldown <= 0:
+                    self.shoot()
+                    self.current_cooldown = self.max_cooldown
 
     def has_ammo(self) -> bool:
-        pass
         """
         Проверяет наличие боеприпасов
 
@@ -629,9 +665,12 @@ class Turret(Building):
         - Проверяет наличие каждого типа боеприпасов
         - Возвращает False при первой нехватке
         """
+        for res, amt in self.ammo_requirements.items():
+            if self.resources.get(res, 0) < amt:
+                return False
+        return True
 
     def find_target(self):
-        pass
         """
         Ищет ближайшую цель для атаки
 
@@ -642,9 +681,16 @@ class Turret(Building):
         - Выбирает самую близкую
         - Если целей нет - self.target = None
         """
+        closest = None
+        min_dist = float('inf')
+        for enemy in self.core.enemy_list:  # Предполагаем core.enemy_list
+            dist = self.distance_to(enemy)
+            if dist < min_dist and dist <= self.range_seconds * T_SIZE:
+                min_dist = dist
+                closest = enemy
+        self.target = closest
 
     def shoot(self):
-        pass
         """
         Производит выстрел
 
@@ -654,19 +700,15 @@ class Turret(Building):
         - Устанавливает таймер перезарядки
         - Добавляет пулю в bullet_list и общий список пуль игры
         """
-
-    def can_give_resource(self) -> bool:
-        pass
-        """
-        Проверяет, может ли турель отдать ресурс
-
-        Возвращает:
-        bool - False
-
-        Логика:
-        - Турели никогда не отдают ресурсы
-        - Только потребляют боеприпасы
-        """
+        if self.target:
+            # Создать Bullet sprite (добавь класс Bullet: arcade.Sprite)
+            bullet = Bullet("bullet.png", 0.5, self.center_x, self.center_y,
+                            angle=math.atan2(self.target.center_y - self.center_y, self.target.center_x - self.center_x))
+            self.bullet_list.append(bullet)
+            # Потратить ammo
+            for res, amt in self.ammo_requirements.items():
+                self.consume_resource(res, amt)
+            self.tower_angle = math.degrees(bullet.angle)
 
 
 class CopperTurret(Turret):
@@ -826,7 +868,6 @@ class Drone(arcade.Sprite):
         self.center_y = core.center_y + 32
 
     def set_route(self, source: Building, destination: Building):
-        pass
         """
         Устанавливает маршрут от источника к приемнику
 
@@ -840,9 +881,12 @@ class Drone(arcade.Sprite):
         - Вычисляет путь к источнику
         - Добавляет себя в очередь источника
         """
+        self.source = source
+        self.destination = destination
+        self.state = "FLYING_TO_SOURCE"
+        self.calculate_path_to_source()
 
     def calculate_path_to_source(self):
-        pass
         """
         Вычисляет путь к источнику ресурсов
 
@@ -851,9 +895,10 @@ class Drone(arcade.Sprite):
         - Создает список точек с шагом self.speed
         - Не обходит препятствия (летит напролом)
         """
+        self.path = [(self.source.center_x, self.source.center_y)]
+        self.current_waypoint = 0
 
     def calculate_path_to_destination(self):
-        pass
         """
         Вычисляет путь к приемнику ресурсов
 
@@ -862,9 +907,10 @@ class Drone(arcade.Sprite):
         - Создает путь от текущей позиции до приемника
         - Не обходит препятствия
         """
+        self.path = [(self.destination.center_x, self.destination.center_y)]
+        self.current_waypoint = 0
 
     def calculate_path_to_station(self):
-        pass
         """
         Вычисляет путь обратно к станции
 
@@ -872,9 +918,10 @@ class Drone(arcade.Sprite):
         - Создает путь от текущей позиции до станции
         - Кратчайший путь: сначала по X, потом по Y
         """
+        self.path = [(self.core.center_x, self.core.center_y)]
+        self.current_waypoint = 0
 
     def update(self, delta_time: float):
-        pass
         """
         Основной цикл дрона
 
@@ -928,9 +975,35 @@ class Drone(arcade.Sprite):
         - Если здание в очереди уничтожено - удаляется из всех очередей и возвращается на станцию
         - При уничтожении дрона - вызывает recover_drone() у станции
         """
+        if self.state == "WAITING_AT_STATION":
+            if self.source:  # Взять задание
+                self.setroute(self.source, self.destination)
+        elif self.state == "FLYING_TO_SOURCE":
+            self.movealongpath(delta_time)
+            if self.distance_to(self.source) < DRONE_PICKUP_DISTANCE:
+                self.state = "WAITING_AT_SOURCE"
+        elif self.state == "WAITING_AT_SOURCE":
+            if self.source.can_give_resource():
+                self.take_resource(self.source)
+                self.state = "FLYING_TO_DEST"
+                self.calculate_path_to_destination()
+        elif self.state == "FLYING_TO_DEST":
+            self.move_along_path(delta_time)
+            if self.distance_to(self.destination) < DRONE_DROP_DISTANCE:
+                self.state = "WAITING_AT_DEST"
+        elif self.state == "WAITING_AT_DEST":
+            self.destination.add_drone_for_unload(self)  # Обработается в processqueues
+            if not self.cargo:
+                self.state = "RETURNING_TO_STATION"
+                self.calculate_path_to_station()
+        elif self.state == "RETURNING_TO_STATION":
+            self.move_along_path(delta_time)
+            if self.distance_to(self.core) < 32:
+                self.state = "WAITING_AT_STATION"
+                if self.station:
+                    self.station.recover_drone(self)
 
     def move_along_path(self, delta_time: float):
-        pass
         """
         Движение по пути к следующей точке
 
@@ -943,9 +1016,15 @@ class Drone(arcade.Sprite):
         - Двигается с постоянной скоростью
         - При достижении точки переходит к следующей
         """
+        if self.current_waypoint < len(self.path):
+            wx, wy = self.path[self.current_waypoint]
+            angle = math.atan2(wy - self.center_y, wx - self.center_x)
+            self.center_x += math.cos(angle) * self.speed * delta_time
+            self.center_y += math.sin(angle) * self.speed * delta_time
+            if self.reached_waypoint():
+                self.current_waypoint += 1
 
     def distance_to(self, target: arcade.Sprite) -> float:
-        pass
         """
         Вычисляет расстояние до цели
 
@@ -955,9 +1034,9 @@ class Drone(arcade.Sprite):
         Возвращает:
         float - расстояние в пикселях между центрами спрайтов
         """
+        return ((self.center_x - target.center_x) ** 2 + (self.center_y - target.center_y) ** 2) ** 0.5
 
     def reached_waypoint(self) -> bool:
-        pass
         """
         Проверяет, достиг ли дрон текущей точки пути
 
@@ -968,9 +1047,19 @@ class Drone(arcade.Sprite):
         - Сравнивает текущую позицию с целевой точкой
         - Если расстояние < 5 пикселей - считается достигшим
         """
+        if self.current_waypoint < len(self.path):
+            wx, wy = self.path[self.current_waypoint]
+            return self.distance_to(arcade.SpriteSolidColor(1, 1, 1, (wx, wy))) < 5  # Fake sprite
+        return True
+
+    def take_resource(self, building):
+        if building.can_give_resource():
+            self.cargo = building.output_resource
+            building.consume_resource(self.cargo)
+            return True
+        return False  # Новый метод
 
     def take_damage(self, amount: int):
-        pass
         """
         Получает урон дроном
 
@@ -985,9 +1074,14 @@ class Drone(arcade.Sprite):
           * Если станция уничтожена - дрон исчезает без восстановления
         - Не позволяет HP быть меньше 0
         """
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            if self.station:
+                self.station.recover_drone(self)
+            self.remove_from_queues()
 
     def remove_from_queues(self):
-        pass
         """
         Удаляет дрона из всех очередей
 
@@ -996,9 +1090,12 @@ class Drone(arcade.Sprite):
         - Если есть destination - удаляет из waiting_for_unload приемника
         - Если есть станция - удаляет из всех связанных очередей
         """
+        if self.source and self in self.source.waiting_drones:
+            self.source.waiting_drones.remove(self)
+        if self.destination and self in self.destination.waiting_for_unload:
+            self.destination.waiting_for_unload.remove(self)
 
     def handle_building_destroyed(self, building: Building):
-        pass
         """
         Обрабатывает разрушение здания
 
@@ -1016,3 +1113,27 @@ class Drone(arcade.Sprite):
           * Ресурс в грузе исчезает
         - Если разрушена станция - дрон уничтожается
         """
+        if building == self.source or building == self.destination:
+            if self.state in ["WAITING_AT_SOURCE", "TAKING_RESOURCE"]:
+                self.state = "RETURNING_TO_STATION"
+            elif self.state in ["WAITING_AT_DEST", "GIVING_RESOURCE"]:
+                self.state = "RETURNING_TO_STATION"
+            self.calculate_path_to_station()
+
+
+class Bullet(arcade.Sprite):
+    def __init__(self, filename: str, scale: float, x: float, y: float, angle: float, damage: int = 1, speed: float = 200.0):
+        super().__init__(filename, scale)
+        self.center_x = x
+        self.center_y = y
+        self.angle = math.degrees(angle)  # Arcade ожидает градусы
+        self.damage = damage
+        self.speed = speed
+
+    def update(self, deltatime: float):
+        super().update(deltatime)  # Стандартное движение Arcade
+        # Проверка коллизии с врагами (в game.py или turret)
+        # for enemy in self.core.enemy_list:  # Если добавишь core
+        #     if arcade.check_for_collision(self, enemy):
+        #         enemy.takedamage(self.damage)
+        #         self.remove_from_sprite_lists()
