@@ -18,8 +18,9 @@ def main():
     - Заголовок: "Заводы и Тауэр Дефенс"
     - Автоматический выход при закрытии окна
     """
-    init_database()
+
     window = StartMenuWindow(800, 600, "Заводы и Тауэр Дефенс")
+    window.set_update_rate(1 / 60)
     arcade.run()
 
 

@@ -1,4 +1,3 @@
-# database.py
 import sqlite3
 import json
 from datetime import datetime
@@ -131,7 +130,7 @@ class GameDatabase:
         Параметры:
         user_id: int - ID пользователя
         level_data: Dict - данные уровня:
-            - level_number: int
+            - level_number: int (1-3)
             - score: int
             - enemies_killed: int
             - time_spent: float
@@ -142,6 +141,12 @@ class GameDatabase:
             - difficulty: str
         """
         try:
+            # Проверяем, что уровень в диапазоне 1-3
+            level_number = level_data['level_number']
+            if not 1 <= level_number <= 3:
+                print(f"Ошибка: уровень {level_number} вне диапазона 1-3")
+                return
+
             self.cursor.execute('''
                 INSERT OR REPLACE INTO level_records 
                 (user_id, level_number, score, enemies_killed, time_spent, 
@@ -149,7 +154,7 @@ class GameDatabase:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id,
-                level_data['level_number'],
+                level_number,
                 level_data['score'],
                 level_data['enemies_killed'],
                 level_data['time_spent'],
