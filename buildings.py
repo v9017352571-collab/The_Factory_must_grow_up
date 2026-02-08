@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any, Deque
 from collections import deque
 from core import ResourceCost
 import random
-T_SIZE = 16
+T_SIZE = 80
 BUILDING_HP = {
     "Дрон-станция": 5,
     "Угольный бур": 5,
@@ -57,11 +57,7 @@ class Building(arcade.Sprite):
         self.hp = 5
         self.max_hp = 5
 
-        # Стоимость постройки - по умолчанию 1 Медь
-        if cost is None:
-            self.cost = ResourceCost([[1, 'Медь']])
-        else:
-            self.cost = cost
+        self.resource = ResourceCost(resource_capacity)
 
         # Система хранения ресурсов
         self.resources = {}
@@ -226,7 +222,7 @@ class Building(arcade.Sprite):
 class MineDrill(Building):
     """Базовый класс для буров (шахт)"""
 
-    def __init__(self, filename: str, scale: float, x: float, y: float, drill_type: str,
+    def __init__(self, scale: float, x: float, y: float, drill_type: str,
                  cell_resource: str, cost: ResourceCost, name: str, fuel_required: bool = False):
         """
         Инициализация бура
@@ -255,7 +251,7 @@ class MineDrill(Building):
         if fuel_required:
             resource_capacity = {"Уголь": 1}  # Для угольного бура нужно топливо
 
-        super().__init__(filename, scale, x, y, size=1,
+        super().__init__('Изображения/Здания/Буры/Бур.png', scale, x, y, size=1,
                          resource_capacity=resource_capacity,
                          cost=cost, name=name)
 
@@ -447,7 +443,7 @@ class ProductionBuilding(Building):
 class BronzeFurnace(ProductionBuilding):
     """Печь для бронзы - производит бронзу из меди, олова и угля"""
 
-    def __init__(self, filename: str, scale: float, x: float, y: float):
+    def __init__(self, scale: float, x: float, y: float):
         """
         Инициализация печи для бронзы
 
@@ -466,7 +462,7 @@ class BronzeFurnace(ProductionBuilding):
         self.production_time: float = 2.0 - время производства в секундах
         """
         cost = ResourceCost([[3, 'Медь'], [1, 'Олово']])
-        super().__init__(filename, scale, x, y, size=2,
+        super().__init__('Изображения/Здания/Заводы/Печь.png', scale, x, y, size=2,
                          input_resources={"Медь": 1, "Олово": 1, "Уголь": 1},
                          output_resource="Бронза",
                          production_time=2.0,
@@ -480,7 +476,7 @@ class BronzeFurnace(ProductionBuilding):
 class SiliconFurnace(ProductionBuilding):
     """Кремниевая печь - производит кремний из песка и угля"""
 
-    def __init__(self, filename: str, scale: float, x: float, y: float):
+    def __init__(self, scale: float, x: float, y: float):
         """
         Инициализация кремниевой печи
 
@@ -499,7 +495,7 @@ class SiliconFurnace(ProductionBuilding):
         self.production_time: float = 2.0 - время производства в секундах
         """
         cost = ResourceCost([[2, 'Медь'], [1, 'Песок']])
-        super().__init__(filename, scale, x, y, size=2,
+        super().__init__('Изображения/Здания/Заводы/Печь.png', scale, x, y, size=2,
                          input_resources={"Песок": 1, "Уголь": 1},
                          output_resource="Кремний",
                          production_time=2.0,
@@ -513,7 +509,7 @@ class SiliconFurnace(ProductionBuilding):
 class AmmoFactory(ProductionBuilding):
     """Завод боеприпасов - производит боеприпасы из олова и угля"""
 
-    def __init__(self, filename: str, scale: float, x: float, y: float):
+    def __init__(self, scale: float, x: float, y: float):
         """
         Инициализация завода боеприпасов
 
@@ -532,7 +528,7 @@ class AmmoFactory(ProductionBuilding):
         self.production_time: float = 1.0 - время производства в секундах
         """
         cost = ResourceCost([[2, 'Медь'], [1, 'Олово']])
-        super().__init__(filename, scale, x, y, size=2,
+        super().__init__('Изображения/Здания/Заводы/Завод.png', scale, x, y, size=2,
                          input_resources={"Олово": 1, "Уголь": 1},
                          output_resource="Боеприпасы",
                          production_time=1.0,
@@ -546,7 +542,7 @@ class AmmoFactory(ProductionBuilding):
 class Turret(Building):
     """Базовый класс для турелей"""
 
-    def __init__(self, base_filename: str, tower_filename: str, scale: float,
+    def __init__(self, scale: float,
                  x: float, y: float, size: int, damage: int, range_seconds: float,
                  cooldown: float, ammo_requirements: Dict[str, int], name: str):
         """
@@ -576,18 +572,18 @@ class Turret(Building):
         # Вместимость для боеприпасов
         capacity = ammo_requirements.copy()
 
-        super().__init__(base_filename, scale, x, y, size=size,
+        super().__init__('Изображения/Здания/Турели/РГ турель основание.png',
                          resource_capacity=capacity,
                          cost=ResourceCost([[1, 'Медь']]),  # базовая стоимость
                          name=name)
 
         # Неподвижная основа
-        self.base_sprite = arcade.Sprite(base_filename, scale)
+        self.base_sprite = arcade.Sprite('Изображения/Здания/Турели/РГ турель основание.png', scale)
         self.base_sprite.center_x = x
         self.base_sprite.center_y = y
 
         # Подвижная башня
-        self.tower_sprite = arcade.Sprite(tower_filename, scale)
+        self.tower_sprite = arcade.Sprite('Изображения/Здания/Турели/РГ турель башня.png', scale)
         self.tower_sprite.center_x = x
         self.tower_sprite.center_y = y
         self.tower_angle = 0.0
@@ -780,7 +776,7 @@ class LongRangeTurret(Turret):
 class Drone(arcade.Sprite):
     """Дрон для доставки ресурсов - ключевой элемент логистики"""
 
-    def __init__(self, filename: str, scale: float, route: [Building, Building], core: 'Core'):
+    def __init__(self, scale: float, route: [Building, Building], core: 'Core'):
         """
         Инициализация дрона
 
@@ -809,7 +805,7 @@ class Drone(arcade.Sprite):
         self.max_hp: int = 2 - максимальное здоровье
         self.speed: float = 16.0 - скорость в пикселях/сек (1 блок/сек)
         """
-        super().__init__(filename, scale)
+        super().__init__('Изображения/Остальное/Дрон.png', scale)
         self.core = core
         self.cargo = None
         self.source = None  # Здание-источник
