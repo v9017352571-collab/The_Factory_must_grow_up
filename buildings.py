@@ -2,6 +2,8 @@ import arcade
 from typing import Dict, Optional, Deque
 from collections import deque
 from resources import ResourceTransaction, ResourceStorage
+from constants import good_bullet, bugs
+from enemies import Bug
 
 # Константы здоровья (из constants.py)
 T_SIZE = 80
@@ -19,9 +21,9 @@ BUILDING_HP = {
 }
 
 
-# =========== БАЗОВЫЙ КЛАСС Building (упрощённый) ===========
+# =========== БАЗОВЫЙ КЛАСС Building ===========
 class Building(arcade.Sprite):
-    """Базовый класс для всех зданий - ПРОСТОЙ И РАБОЧИЙ"""
+    """Базовый класс для всех зданий"""
 
     def __init__(
             self,
@@ -261,7 +263,7 @@ class MineDrill(Building):
         if self.needs_coal:
             # Проверяем есть ли уголь
             if not self.storage.has("Уголь", 1):
-                return  # Нет угля - не работает
+                return
             # Тратим уголь
             self.storage.remove("Уголь", 1)
 
@@ -272,11 +274,11 @@ class MineDrill(Building):
 class CoalDrill(MineDrill):
     """Угольный бур - медленный, требует уголь"""
 
-    def __init__(self, scale: float, x: float, y: float, resource_type: str = "Медь"):
+    def __init__(self, x: float, y: float, resource_type: str = "Медь"):
         cost = ResourceTransaction({"Медь": 2})
         super().__init__(
             image_path="Изображения/Здания/Буры/Бур.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             drill_type="угольный",
             resource_type=resource_type,
@@ -289,11 +291,11 @@ class CoalDrill(MineDrill):
 class ElectricDrill(MineDrill):
     """Электрический бур - быстрый, не требует топлива"""
 
-    def __init__(self, scale: float, x: float, y: float, resource_type: str = "Медь"):
+    def __init__(self, x: float, y: float, resource_type: str = "Медь"):
         cost = ResourceTransaction({"Медь": 3, "Железо": 1})
         super().__init__(
             image_path="Изображения/Здания/Буры/Бур.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             drill_type="электрический",
             resource_type=resource_type,
@@ -362,11 +364,11 @@ class ProductionBuilding(Building):
 class BronzeFurnace(ProductionBuilding):
     """Печь для бронзы"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 3, "Олово": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Печь.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             recipe={"Медь": 1, "Олово": 1, "Уголь": 1},
@@ -382,11 +384,11 @@ class BronzeFurnace(ProductionBuilding):
 class SiliconFurnace(ProductionBuilding):
     """Кремниевая печь"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 2, "Песок": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Печь.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             recipe={"Песок": 1, "Уголь": 1},
@@ -402,11 +404,11 @@ class SiliconFurnace(ProductionBuilding):
 class AmmoFactory(ProductionBuilding):
     """Завод боеприпасов"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 2, "Олово": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Завод.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             recipe={"Олово": 1, "Уголь": 1},
@@ -432,6 +434,8 @@ class Turret(Building):
             size: int,
             damage: int,
             attack_range: float,  # в пикселях
+            bullet_lifetime: float,
+            bullet_speed: float,
             cooldown: float,
             ammo_type: str,  # Тип боеприпасов
             ammo_per_shot: int,  # Сколько тратит за выстрел
@@ -465,6 +469,8 @@ class Turret(Building):
         # Параметры стрельбы
         self.damage = damage
         self.attack_range = attack_range
+        self.bullet_lifetime = bullet_lifetime
+        self.bullet_speed = bullet_speed
         self.cooldown_time = cooldown
         self.current_cooldown = 0.0
         self.ammo_type = ammo_type
@@ -472,7 +478,8 @@ class Turret(Building):
 
         # Для поиска цели
         self.target = None
-        self.bullets = arcade.SpriteList()  # Пули этой турели
+
+        # self.bullets = arcade.SpriteList()  # Пули этой турели
 
     def update(self, delta_time: float):
         """Переопределяем для стрельбы"""
@@ -486,7 +493,7 @@ class Turret(Building):
             self.current_cooldown -= delta_time
 
         # Обновляем пули
-        self.bullets.update()
+        # self.bullets.update() # update в игре через единый список для всех пуль
 
         # Если перезарядились и есть патроны - ищем цель
         if self.current_cooldown <= 0 and self.storage.has(self.ammo_type, self.ammo_per_shot):
@@ -496,11 +503,19 @@ class Turret(Building):
     def _find_target(self) -> bool:
         """
         Ищет цель в радиусе
-        Тимлид должен передавать список врагов через метод set_enemies()
+        передавать список врагов через метод set_enemies()
         """
-        # Пока заглушка - всегда возвращаем False
-        self.target = None
-        return False
+        self.set_enemies()
+        if not self.potential_enemies:
+            return False
+        m = self.potential_enemies[0]
+        ml = self.calculate_range(m.center_x, m.center_y)
+        for enem in self.potential_enemies[1:]:
+            if self.calculate_range(enem.center_x, enem.center_y) < ml:
+                m = enem
+                ml = enem.calculate_range(m.center_x, m.center_y)
+        self.target = m
+        return True
 
     def _shoot(self):
         """Производит выстрел"""
@@ -510,28 +525,34 @@ class Turret(Building):
 
         self.current_cooldown = self.cooldown_time
 
-        # Здесь создать пулю
-        # Например: game.create_bullet(self, self.target)
+        good_bullet.append(Shot_Bullet(self, target=self.target))
 
-    def set_enemies(self, enemies_list):
-        """Тимлид передаёт список врагов для поиска цели"""
-        # Реализуем потом
-        pass
+    def set_enemies(self, enemies_list = bugs):
+        """для поиска цели"""
+        self.potential_enemies = []
+        for bug in enemies_list:
+            if self.calculate_range(bug.center_x, bug.center_y) < 1 :
+                self.potential_enemies.append(bug)
+
+    def calculate_range(self, x, y) -> float:
+        return (x ** 2 + y ** 2) / self.radius ** 2
 
 
 class CopperTurret(Turret):
     """Медная турель"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             damage=1,
             attack_range=200,
+            bullet_lifetime=3.0,
+            bullet_speed=75.0,
             cooldown=1.0,
             ammo_type="Медь",
             ammo_per_shot=1,
@@ -545,16 +566,18 @@ class CopperTurret(Turret):
 class BronzeTurret(Turret):
     """Бронзовая турель"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 3, "Бронза": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             damage=2,
             attack_range=250,
+            bullet_lifetime=3.5,
+            bullet_speed=87.5,
             cooldown=0.7,
             ammo_type="Боеприпасы",
             ammo_per_shot=1,
@@ -568,16 +591,18 @@ class BronzeTurret(Turret):
 class LongRangeTurret(Turret):
     """Дальняя турель"""
 
-    def __init__(self, scale: float, x: float, y: float):
+    def __init__(self, x: float, y: float):
         cost = ResourceTransaction({"Медь": 4, "Бронза": 3, "Микросхема": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
-            scale=scale,
+            scale=0.25,
             x=x, y=y,
             size=2,
             damage=6,
             attack_range=400,
+            bullet_lifetime=4.0,
+            bullet_speed=100.0,
             cooldown=2.0,
             ammo_type="Боеприпасы",
             ammo_per_shot=1,
@@ -585,20 +610,39 @@ class LongRangeTurret(Turret):
             name="Дальняя турель"
         )
         # Дальняя турель требует и микросхемы тоже
-        self.storage.capacity["Микросхема"] = 20
-        self.storage.resources["Микросхема"] = 0
+        # self.storage.capacity["Микросхема"] = 20
+        # self.storage.resources["Микросхема"] = 0
 
         self.hp = BUILDING_HP["Дальняя турель"]
         self.max_hp = self.hp
 
-    def _shoot(self):
-        """Дальняя турель тратит и боеприпасы и микросхему"""
-        if not (self.storage.has("Боеприпасы", 1) and
-                self.storage.has("Микросхема", 1)):
-            return
 
-        self.storage.remove("Боеприпасы", 1)
-        self.storage.remove("Микросхема", 1)
-        self.current_cooldown = self.cooldown_time
+class Shot_Bullet(arcade.Sprite):
+    """временный класс для выстрелов"""
+    def __init__(self, source: 'Turret', target: 'Bug'):
+        super().__init__('Изображения/Остальное/Пуля.png', 0.05)
+        self.center_x = source.center_x
+        self.center_y = source.center_y
+        self.lifetime = source.bullet_lifetime
+        self.damage = source.damage
+        self.bullet_speed = source.bullet_speed
+        self.attack_range = source.attack_range
+        self.target = target
+        self.velocity = (0.0, 0.0)
+        self.set_velocity()
 
-        # Создать пулю...
+    def set_velocity(self):
+        """устанавливает вектор движения пули"""
+        x, y = self.target.center_x - self.source.center, self.target.center_y - self.source.center_y
+        s = x + y
+        self.velocity = (x / s, y / s)
+
+    def update(self, delta_time: float):
+        """двигаем пулю к цели"""
+        self.lifetime -= delta_time
+        if self.lifetime <= 0:
+            self.remove_from_sprite_lists()
+
+        self.center_x += int(self.velocity[0] * delta_time)
+        self.center_y += int(self.velocity[1] * delta_time)
+
