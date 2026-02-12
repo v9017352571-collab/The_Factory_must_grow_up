@@ -1,7 +1,7 @@
 # player.py
 import arcade
 from typing import Optional, Any
-from constants import TILE_SIZE, SPRITE_SCALE, PLAYER_PICKUP_DISTANCE, PLAYER_DROP_DISTANCE, PLAYER_SPEED
+from constants import T_SIZE, SPRITE_SCALE, PLAYER_PICKUP_DISTANCE, PLAYER_DROP_DISTANCE, PLAYER_SPEED
 
 
 class Player(arcade.Sprite):
@@ -36,7 +36,7 @@ class Player(arcade.Sprite):
         self.core = core
         self.hp = 3
         self.max_hp = 3
-        self.speed = PLAYER_SPEED * TILE_SIZE  # 16 пикселей/сек
+        self.speed = PLAYER_SPEED * T_SIZE  # 16 пикселей/сек
         self.is_dead = False
         self.respawn_timer = 0.0
         self.max_respawn_timer = 0.0  # Мгновенное возрождение

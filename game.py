@@ -8,10 +8,11 @@ import random
 from arcade.math import rand_in_circle, rand_on_circle
 from arcade.particles import Emitter, EmitBurst, LifetimeParticle
 
-from constants import T_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, players, buildings, bugs, \
+from constants import T_SIZE, SPRITE_SCALE, WAVES, BUILDING_HP, BUILDING_KEYS, BAGS, \
     CAMERA_LERP, RESOURCES, TEXTYRE, MUSIC_MENU, MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_ATTACKS1, MUSIC_UNITED3, \
-    MUSIC_ATTACKS2, MUSIC_ATTACKS3, good_bullet, bad_bullet, HIT, save_level_to_db, JSON
-from core import Core, ResourceCost
+    MUSIC_ATTACKS2, MUSIC_ATTACKS3, HIT, JSON
+from sprite_list import good_bullet, bad_bullet, players, buildings, bugs
+from core import Core
 from player import Player
 from buildings import (Building, ElectricDrill,
                        BronzeFurnace, SiliconFurnace, AmmoFactory,
@@ -181,7 +182,7 @@ class MyGame(arcade.Window):
         Этот метод вызывается после создания окна и загрузки карты,
         готовит игру к запуску.
         """
-        self.core = Core("Изображения\Здания\Ядро (2).png", SPRITE_SCALE, 200, 200)
+        self.core = Core(SPRITE_SCALE, 200, 200)
         buildings.append(self.core)
         self.player = Player("Изображения\Остальное\Нгг.png", SPRITE_SCALE, self.core)
         players.append(self.player)
@@ -521,8 +522,8 @@ class MyGame(arcade.Window):
         )
         save_button.center_x = screen_width // 2
         save_button.center_y = screen_height // 2
-        save_button.on_click = lambda е: save_level_to_db(self.txtt, JSON, WAVES, [players, buildings,
-                                                                         bugs, good_bullet, bad_bullet])
+        # save_button.on_click = lambda е: save_level_to_db(self.txtt, JSON, WAVES, [players, buildings,
+        #                                                                  bugs, good_bullet, bad_bullet])
         self.ui_manager.add(save_button)
 
         # 6. Кнопка "Вернуться" (чуть ниже)

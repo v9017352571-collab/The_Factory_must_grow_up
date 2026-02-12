@@ -2,12 +2,11 @@
 import arcade
 from typing import Dict, Optional, Deque
 from collections import deque
-from core import ResourceCost
 import random, math
 
 from constants import *
 from resources import ResourceTransaction, ResourceStorage
-from constants import good_bullet, bugs
+from sprite_list import good_bullet, bugs
 from enemies import Bug
 
 # Константы здоровья (из constants.py)
@@ -47,7 +46,6 @@ class Building(arcade.Sprite):
         # Основные свойства
         self.center_x = x
         self.center_y = y
-        self.size = size
         self.name = name
 
         # Здоровье
@@ -650,4 +648,324 @@ class Shot_Bullet(arcade.Sprite):
 
         self.center_x += int(self.velocity[0] * delta_time)
         self.center_y += int(self.velocity[1] * delta_time)
+
+
+class Drone(arcade.Sprite):
+    """Дрон для доставки ресурсов - ключевой элемент логистики"""
+
+    def __init__(self, filename: str, scale: float, route: [Building, Building], core: 'Core'):
+        """
+        Инициализация дрона
+
+        Параметры:
+        filename: str - путь к изображению дрона (32x32 пикселей)
+        scale: float - масштаб (0.5 для 16px)
+        station: DroneStation - станция-владелец
+
+        Атрибуты:
+        self.station: DroneStation - ссылка на станцию
+        self.cargo: Optional[str] = None - текущий ресурс в грузе
+        self.source: Optional[Building] = None - здание-источник для забора
+        self.destination: Optional[Building] = None - здание-приемник для доставки
+        self.path: List[Tuple[float, float]] = [] - путь следования
+        self.current_waypoint: int = 0 - текущая точка пути
+        self.state: str = "WAITING_AT_STATION" - состояние дрона:
+            - WAITING_AT_STATION: ждет на станции
+            - FLYING_TO_SOURCE: летит к источнику
+            - WAITING_AT_SOURCE: ждет в очереди у источника
+            - TAKING_RESOURCE: получает ресурс от источника
+            - FLYING_TO_DEST: летит к приемнику
+            - WAITING_AT_DEST: ждет в очереди у приемника
+            - GIVING_RESOURCE: отдает ресурс приемнику
+            - RETURNING_TO_STATION: возвращается на станцию
+        self.hp: int = 2 - здоровье дрона
+        self.max_hp: int = 2 - максимальное здоровье
+        self.speed: float = 16.0 - скорость в пикселях/сек (1 блок/сек)
+        """
+        super().__init__(filename, scale)
+        self.core = core
+        self.cargo = None
+        self.source = None  # Здание-источник
+        self.destination = None  # Здание-приемник
+        self.path = []
+        self.current_waypoint = 0
+        self.state = "WAITING_AT_STATION"  # Начинает над станцией
+        self.hp = 2
+        self.max_hp = 2
+        self.speed = 16.0  # 1 блок/сек = 16 пикселей/сек
+
+        # Начальная позиция - над станцией
+        self.center_x = core.center_x
+        self.center_y = core.center_y + 32
+
+    def set_route(self, source: Building, destination: Building):
+        """
+        Устанавливает маршрут от источника к приемнику
+
+        Параметры:
+        source: Building - здание-источник
+        destination: Building - здание-приемник
+
+        Логика:
+        - Сохраняет источник и приемник
+        - Устанавливает состояние FLYING_TO_SOURCE
+        - Вычисляет путь к источнику
+        - Добавляет себя в очередь источника
+        """
+        self.source = source
+        self.destination = destination
+        self.state = "FLYING_TO_SOURCE"
+        self.calculate_path_to_source()
+
+    def calculate_path_to_source(self):
+        """
+        Вычисляет путь к источнику ресурсов
+
+        Логика:
+        - Путь всегда кратчайший: сначала по X до source.center_x, потом по Y до source.center_y
+        - Создает список точек с шагом self.speed
+        - Не обходит препятствия (летит напролом)
+        """
+        self.path = [(self.source.center_x, self.source.center_y)]
+        self.current_waypoint = 0
+
+    def calculate_path_to_destination(self):
+        """
+        Вычисляет путь к приемнику ресурсов
+
+        Логика:
+        - Аналогична calculate_path_to_source()
+        - Создает путь от текущей позиции до приемника
+        - Не обходит препятствия
+        """
+        self.path = [(self.destination.center_x, self.destination.center_y)]
+        self.current_waypoint = 0
+
+    def calculate_path_to_station(self):
+        """
+        Вычисляет путь обратно к станции
+
+        Логика:
+        - Создает путь от текущей позиции до станции
+        - Кратчайший путь: сначала по X, потом по Y
+        """
+        self.path = [(self.core.center_x, self.core.center_y)]
+        self.current_waypoint = 0
+
+    def update(self, delta_time: float):
+        """
+        Основной цикл дрона
+
+        Параметры:
+        delta_time: float - время с предыдущего кадра
+
+        Логика для каждого состояния:
+        1. WAITING_AT_STATION:
+           - Ждет на станции
+           - Если станция установила маршрут - переходит в FLYING_TO_SOURCE
+           - Если станция уничтожена - дрон уничтожается
+
+        2. FLYING_TO_SOURCE:
+           - Движется к источнику по пути
+           - При достижении источника - добавляет себя в waiting_drones
+           - Переходит в WAITING_AT_SOURCE
+
+        3. WAITING_AT_SOURCE:
+           - Ждет в очереди источника
+           - Когда доходит очередь - проверяет расстояние
+           - Если на расстоянии DRONE_PICKUP_DISTANCE - переходит в TAKING_RESOURCE
+           - Если источник уничтожен - возвращается на станцию
+
+        4. TAKING_RESOURCE:
+           - Получает ресурс от источника
+           - Если успешно получил - выходит из очереди и переходит в FLYING_TO_DEST
+           - Если неуспешно - остается в состоянии
+
+        5. FLYING_TO_DEST:
+           - Движется к приемнику по пути
+           - При достижении приемника - добавляет себя в waiting_for_unload
+           - Переходит в WAITING_AT_DEST
+
+        6. WAITING_AT_DEST:
+           - Ждет в очереди приемника
+           - Когда доходит очередь - проверяет расстояние
+           - Если на расстоянии DRONE_DROP_DISTANCE - переходит в GIVING_RESOURCE
+           - Если приемник уничтожен - возвращается на станцию
+
+        7. GIVING_RESOURCE:
+           - Отдает ресурс приемнику
+           - Если успешно отдал - выходит из очереди и переходит в RETURNING_TO_STATION
+           - Если неуспешно - остается в состоянии
+
+        8. RETURNING_TO_STATION:
+           - Движется обратно к станции
+           - При достижении станции - переходит в WAITING_AT_STATION
+
+        Особенности:
+        - Если станция уничтожена - дрон уничтожается
+        - Если здание в очереди уничтожено - удаляется из всех очередей и возвращается на станцию
+        - При уничтожении дрона - вызывает recover_drone() у станции
+        """
+        if self.state == "WAITING_AT_STATION":
+            if self.source:  # Взять задание
+                self.setroute(self.source, self.destination)
+        elif self.state == "FLYING_TO_SOURCE":
+            self.movealongpath(delta_time)
+            if self.distance_to(self.source) < DRONE_PICKUP_DISTANCE:
+                self.state = "WAITING_AT_SOURCE"
+        elif self.state == "WAITING_AT_SOURCE":
+            if self.source.can_give_resource():
+                self.take_resource(self.source)
+                self.state = "FLYING_TO_DEST"
+                self.calculate_path_to_destination()
+        elif self.state == "FLYING_TO_DEST":
+            self.move_along_path(delta_time)
+            if self.distance_to(self.destination) < DRONE_DROP_DISTANCE:
+                self.state = "WAITING_AT_DEST"
+        elif self.state == "WAITING_AT_DEST":
+            self.destination.add_drone_for_unload(self)  # Обработается в processqueues
+            if not self.cargo:
+                self.state = "RETURNING_TO_STATION"
+                self.calculate_path_to_station()
+        elif self.state == "RETURNING_TO_STATION":
+            self.move_along_path(delta_time)
+            if self.distance_to(self.core) < 32:
+                self.state = "WAITING_AT_STATION"
+                if self.station:
+                    self.station.recover_drone(self)
+
+    def move_along_path(self, delta_time: float):
+        """
+        Движение по пути к следующей точке
+
+        Параметры:
+        delta_time: float - время с предыдущего кадра
+
+        Логика:
+        - Если есть следующая точка в пути - двигается к ней
+        - Вычисляет вектор движения
+        - Двигается с постоянной скоростью
+        - При достижении точки переходит к следующей
+        """
+        if self.current_waypoint < len(self.path):
+            wx, wy = self.path[self.current_waypoint]
+            angle = math.atan2(wy - self.center_y, wx - self.center_x)
+            self.center_x += math.cos(angle) * self.speed * delta_time
+            self.center_y += math.sin(angle) * self.speed * delta_time
+            if self.reached_waypoint():
+                self.current_waypoint += 1
+
+    def distance_to(self, target: arcade.Sprite) -> float:
+        """
+        Вычисляет расстояние до цели
+
+        Параметры:
+        target: arcade.Sprite - цель для измерения расстояния
+
+        Возвращает:
+        float - расстояние в пикселях между центрами спрайтов
+        """
+        return ((self.center_x - target.center_x) ** 2 + (self.center_y - target.center_y) ** 2) ** 0.5
+
+    def reached_waypoint(self) -> bool:
+        """
+        Проверяет, достиг ли дрон текущей точки пути
+
+        Возвращает:
+        bool - True если достиг текущей точки, False если нет
+
+        Логика:
+        - Сравнивает текущую позицию с целевой точкой
+        - Если расстояние < 5 пикселей - считается достигшим
+        """
+        if self.current_waypoint < len(self.path):
+            wx, wy = self.path[self.current_waypoint]
+            return self.distance_to(arcade.SpriteSolidColor(1, 1, 1, (wx, wy))) < 5  # Fake sprite
+        return True
+
+    def take_resource(self, building):
+        if building.can_give_resource():
+            self.cargo = building.output_resource
+            building.consume_resource(self.cargo)
+            return True
+        return False  # Новый метод
+
+    def take_damage(self, amount: int):
+        """
+        Получает урон дроном
+
+        Параметры:
+        amount: int - количество урона
+
+        Логика:
+        - Уменьшает HP на amount
+        - Если HP <= 0 - дрон уничтожен
+        - При уничтожении дрона:
+          * Если станция жива - вызывает station.recover_drone()
+          * Если станция уничтожена - дрон исчезает без восстановления
+        - Не позволяет HP быть меньше 0
+        """
+        self.hp -= amount
+        if self.hp <= 0:
+            self.hp = 0
+            if self.station:
+                self.station.recover_drone(self)
+            self.remove_from_queues()
+
+    def remove_from_queues(self):
+        """
+        Удаляет дрона из всех очередей
+
+        Логика:
+        - Если есть source - удаляет из waiting_drones источника
+        - Если есть destination - удаляет из waiting_for_unload приемника
+        - Если есть станция - удаляет из всех связанных очередей
+        """
+        if self.source and self in self.source.waiting_drones:
+            self.source.waiting_drones.remove(self)
+        if self.destination and self in self.destination.waiting_for_unload:
+            self.destination.waiting_for_unload.remove(self)
+
+    def handle_building_destroyed(self, building: Building):
+        """
+        Обрабатывает разрушение здания
+
+        Параметры:
+        building: Building - уничтоженное здание
+
+        Логика:
+        - Если разрушен источник:
+          * Если дрон в состояниях WAITING_AT_SOURCE/TAKING_RESOURCE - переходит в RETURNING_TO_STATION
+          * Удаляет себя из очереди источника
+          * Ресурс, если был в грузе, исчезает
+        - Если разрушен приемник:
+          * Если дрон в состояниях WAITING_AT_DEST/GIVING_RESOURCE - переходит в RETURNING_TO_STATION
+          * Удаляет себя из очереди приемника
+          * Ресурс в грузе исчезает
+        - Если разрушена станция - дрон уничтожается
+        """
+        if building == self.source or building == self.destination:
+            if self.state in ["WAITING_AT_SOURCE", "TAKING_RESOURCE"]:
+                self.state = "RETURNING_TO_STATION"
+            elif self.state in ["WAITING_AT_DEST", "GIVING_RESOURCE"]:
+                self.state = "RETURNING_TO_STATION"
+            self.calculate_path_to_station()
+
+
+class Bullet(arcade.Sprite):
+    def __init__(self, filename: str, scale: float, x: float, y: float, angle: float, damage: int = 1, speed: float = 200.0):
+        super().__init__(filename, scale)
+        self.center_x = x
+        self.center_y = y
+        self.angle = math.degrees(angle)  # Arcade ожидает градусы
+        self.damage = damage
+        self.speed = speed
+
+    def update(self, deltatime: float):
+        super().update(deltatime)  # Стандартное движение Arcade
+        # Проверка коллизии с врагами (в game.py или turret)
+        # for enemy in self.core.enemy_list:  # Если добавишь core
+        #     if arcade.check_for_collision(self, enemy):
+        #         enemy.takedamage(self.damage)
+        #         self.remove_from_sprite_lists()
 
