@@ -1,4 +1,3 @@
-# menu.py
 import arcade
 import sqlite3
 import random
@@ -6,7 +5,6 @@ from arcade.gui import UIManager, UIBoxLayout, UIFlatButton, UILabel, UIInputTex
 from typing import Dict, List, Tuple, Optional, Any, Callable
 from datetime import datetime
 from database import GameDatabase
-
 
 class StartMenuWindow(arcade.Window):
     """Стартовое меню игры с выбором уровня и авторизацией"""
@@ -217,13 +215,12 @@ class StartMenuWindow(arcade.Window):
         from game import MyGame
         self.close()
 
-        # Здесь нужно передать level_number в игру
-        game = MyGame(800, 600, f"Уровень {level_number}", f"level{level_number}.json")
+        game = MyGame(800, 600, f"Уровень {level_number}")  # убран второй аргумент с картой
         game.current_user_id = self.current_user_id
         game.current_user = self.current_user
         game.current_level = level_number
 
-        # Загружаем сохраненное состояние, если есть
+        # Загружаем сохранённое состояние, если есть
         saved_state = self.db.load_game_state(self.current_user_id)
         if saved_state:
             # Здесь можно восстановить состояние игры

@@ -1,7 +1,7 @@
 # player.py
 import arcade
 from typing import Optional, Any
-from constants import T_SIZE, SPRITE_SCALE, PLAYER_PICKUP_DISTANCE, PLAYER_DROP_DISTANCE, PLAYER_SPEED
+from config import T_SIZE, SPRITE_SCALE, PLAYER_PICKUP_DISTANCE, PLAYER_DROP_DISTANCE, PLAYER_SPEED
 
 
 class Player(arcade.Sprite):
