@@ -11,7 +11,7 @@ import os
 import zipfile
 import shutil
 import json
-from buildings import ElectricDrill, BronzeFurnace, SiliconFurnace, AmmoFactory, CopperTurret,\
+from buildings import Building, ElectricDrill, BronzeFurnace, SiliconFurnace, AmmoFactory, CopperTurret,\
     BronzeTurret, LongRangeTurret
 from enemies import (Bug, Beetle, ArmoredBeetle, SpittingBeetle,
                      DominicTorettoBeetle, HarkerBeetle)

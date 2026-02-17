@@ -1,8 +1,11 @@
 import arcade
 import math
 from typing import Any
-from config import SPRITE_SCALE, T_SIZE
 from sprite_list import bad_bullet # для добавления пуль
+
+
+T_SIZE = 80  # пикселей на клетку
+SPRITE_SCALE = 0.25  # масштаб для 32px спрайтов (становится 16px)
 
 class Bullet(arcade.Sprite):
     """Пуля, летящая от источника к цели"""

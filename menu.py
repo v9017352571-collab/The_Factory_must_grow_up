@@ -213,7 +213,6 @@ class StartMenuWindow(arcade.Window):
     def start_level(self, level_number: int):
         """Запуск выбранного уровня"""
         from game import MyGame
-        self.close()
 
         game = MyGame(800, 600, f"Уровень {level_number}")  # убран второй аргумент с картой
         game.current_user_id = self.current_user_id
@@ -227,6 +226,7 @@ class StartMenuWindow(arcade.Window):
             pass
 
         arcade.run()
+        self.close()
 
     def continue_game(self):
         """Продолжение сохраненной игры"""

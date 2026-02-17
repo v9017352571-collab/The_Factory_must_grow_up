@@ -1,6 +1,6 @@
 # game.py
 import arcade
-from arcade.camera import Camera2D
+# from arcade.camera import Camera2D
 from arcade.gui import UIManager
 import math
 import random
@@ -16,7 +16,8 @@ from core import Core
 from player import Player
 from buildings import (Building, ElectricDrill,
                        BronzeFurnace, SiliconFurnace, AmmoFactory,
-                       CopperTurret, BronzeTurret, LongRangeTurret, Drone)
+                       CopperTurret, BronzeTurret, LongRangeTurret)
+from drones import Drone
 from enemies import (Bug, Beetle, ArmoredBeetle, SpittingBeetle,
                      DominicTorettoBeetle, HarkerBeetle)
 
@@ -251,7 +252,8 @@ class MyGame(arcade.Window):
             self.cam()
                 # Обновление игрока
             if players:
-                self.player.update(delta_time, self.pressed_keys)
+                self.player.handle_movement(delta_time, self.pressed_keys)
+                self.player.update(delta_time)
 
             position = (
                 self.player.center_x,
@@ -429,7 +431,7 @@ class MyGame(arcade.Window):
         screen_height = window.height
 
         # Очистка SpriteList перед обновлением
-        self.resource_icons.clear()
+        # self.resource_icons.clear()
 
         # Вычисляем позиции относительно камеры
         camera_left = self.world_camera.bottom_left[0]

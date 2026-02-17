@@ -1,7 +1,8 @@
 import arcade
 from typing import List, Dict, Union, Optional
-from buildings import Building
+# from buildings import Building
 from resources import *
+from constants import Building
 
 # ----------- ЯДРО (немного изменённое) -----------
 class Core(Building):
@@ -18,8 +19,7 @@ class Core(Building):
             name="Ядро",
             hp=20,  # У ядра больше HP
             cost=cost,
-            storage_capacity=None,  # None = бесконечное хранилище
-            size=2
+            storage_capacity=None
         )
 
         # Начальные ресурсы
@@ -30,3 +30,7 @@ class Core(Building):
     # Ядро не производит ничего
     def _produce(self):
         pass
+
+
+x = Core(0.25, 1, 1)
+print(x)
