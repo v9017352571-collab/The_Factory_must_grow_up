@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple, Optional, Any, Callable
 from datetime import datetime
 from database import GameDatabase
 
+
 class StartMenuWindow(arcade.Window):
     """Стартовое меню игры с выбором уровня и авторизацией"""
 
@@ -25,6 +26,36 @@ class StartMenuWindow(arcade.Window):
         """Настройка интерфейса стартового меню"""
         self.ui_manager.clear()
 
+        # --- Пиксельный стиль для кнопок (Arcade 3.3.3 совместимый) ---
+        font_name = "Courier New"
+        # Стиль для всех состояний кнопки (только поддерживаемые параметры)
+        button_style = {
+            "normal": UIFlatButton.UIStyle(
+                font_name=font_name,
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(80, 80, 80)
+            ),
+            "hover": UIFlatButton.UIStyle(
+                font_name=font_name,
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(100, 100, 100)
+            ),
+            "press": UIFlatButton.UIStyle(
+                font_name=font_name,
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(60, 60, 60)
+            ),
+            "disabled": UIFlatButton.UIStyle(
+                font_name=font_name,
+                font_size=14,
+                font_color=arcade.color.GRAY,
+                bg=(40, 40, 40)
+            )
+        }
+
         # Создаем основную вертикальную коробку
         v_box = UIBoxLayout(vertical=True, space_between=20)
 
@@ -37,7 +68,7 @@ class StartMenuWindow(arcade.Window):
         title_label = UILabel(
             text="🚀 ЗАВОДЫ И ТАУЭР ДЕФЕНС 🚀",
             font_size=36,
-            font_name="Kenney Future",
+            font_name=font_name,
             text_color=arcade.color.GOLD,
             width=self.width - 100,
             align="center"
@@ -48,6 +79,7 @@ class StartMenuWindow(arcade.Window):
         subtitle_label = UILabel(
             text="Защити ядро, строй заводы, управляй дронами!",
             font_size=18,
+            font_name=font_name,
             text_color=arcade.color.LIGHT_GRAY,
             width=self.width - 100,
             align="center"
@@ -63,6 +95,7 @@ class StartMenuWindow(arcade.Window):
         auth_label = UILabel(
             text="Введите имя игрока:",
             font_size=20,
+            font_name=font_name,
             text_color=arcade.color.LIGHT_BLUE,
             width=300,
             align="center"
@@ -73,14 +106,17 @@ class StartMenuWindow(arcade.Window):
             width=300,
             height=40,
             font_size=18,
+            font_name=font_name,
             text_color=arcade.color.BLACK
         )
         auth_container.add(self.username_input)
 
+        # Кнопка "Войти"
         login_button = UIFlatButton(
-            text="Войти / Зарегистрироваться",
+            text="Войти",
             width=300,
-            height=40
+            height=40,
+            style=button_style
         )
 
         @login_button.event("on_click")
@@ -110,7 +146,8 @@ class StartMenuWindow(arcade.Window):
         exit_button = UIFlatButton(
             text="Выход",
             width=200,
-            height=40
+            height=40,
+            style=button_style
         )
 
         @exit_button.event("on_click")
@@ -143,25 +180,53 @@ class StartMenuWindow(arcade.Window):
         title_label = UILabel(
             text=f"Добро пожаловать, {self.current_user}!",
             font_size=24,
+            font_name="Courier New",
             text_color=arcade.color.LIGHT_GREEN,
             width=self.width - 100,
             align="center"
         )
         self.level_container.add(title_label)
 
+        # Стиль для кнопок уровней (тот же, что и для главных кнопок)
+        level_button_style = {
+            "normal": UIFlatButton.UIStyle(
+                font_name="Courier New",
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(80, 80, 80)
+            ),
+            "hover": UIFlatButton.UIStyle(
+                font_name="Courier New",
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(100, 100, 100)
+            ),
+            "press": UIFlatButton.UIStyle(
+                font_name="Courier New",
+                font_size=14,
+                font_color=arcade.color.WHITE,
+                bg=(60, 60, 60)
+            ),
+            "disabled": UIFlatButton.UIStyle(
+                font_name="Courier New",
+                font_size=14,
+                font_color=arcade.color.GRAY,
+                bg=(40, 40, 40)
+            )
+        }
+
         # Кнопки уровней
-        total_levels = 3  # Всего 3 уровня в игре
+        total_levels = 3
         for level in range(1, total_levels + 1):
-            # Создаем контейнер для центрирования кнопки
             level_centered = UIBoxLayout(vertical=False)
             level_centered.add(UILabel(text="", width=(self.width - 250) // 2))
 
-            # Иконка уровня
             icon = "🔓" if level <= unlocked_levels else "🔒"
             level_button = UIFlatButton(
                 text=f"{icon} Уровень {level}",
                 width=200,
-                height=50
+                height=50,
+                style=level_button_style
             )
 
             if level <= unlocked_levels:
@@ -171,7 +236,6 @@ class StartMenuWindow(arcade.Window):
 
             level_centered.add(level_button)
 
-            # Получаем лучший результат для этого уровня
             level_records = self.db.get_user_level_records(self.current_user_id)
             record = level_records.get(level, {})
 
@@ -179,6 +243,7 @@ class StartMenuWindow(arcade.Window):
                 record_label = UILabel(
                     text=f"🏆 {record.get('score', 0)}",
                     font_size=14,
+                    font_name="Courier New",
                     text_color=arcade.color.GOLD,
                     width=50,
                     align="center"
@@ -190,7 +255,7 @@ class StartMenuWindow(arcade.Window):
             level_centered.add(UILabel(text="", width=(self.width - 250) // 2))
             self.level_container.add(level_centered)
 
-        # Кнопка продолжить (есть сохранение)
+        # Кнопка продолжить (если есть сохранение)
         saved_state = self.db.load_game_state(self.current_user_id)
         if saved_state:
             continue_centered = UIBoxLayout(vertical=False)
@@ -199,7 +264,8 @@ class StartMenuWindow(arcade.Window):
             continue_button = UIFlatButton(
                 text="🎮 Продолжить игру",
                 width=250,
-                height=50
+                height=50,
+                style=level_button_style
             )
 
             @continue_button.event("on_click")
@@ -214,7 +280,10 @@ class StartMenuWindow(arcade.Window):
         """Запуск выбранного уровня"""
         from game import MyGame
 
-        game = MyGame(800, 600, f"Уровень {level_number}")  # убран второй аргумент с картой
+        # Закрываем окно меню перед открытием игры
+        self.close()
+
+        game = MyGame(800, 600, f"Уровень {level_number}", level_number=level_number)
         game.current_user_id = self.current_user_id
         game.current_user = self.current_user
         game.current_level = level_number
@@ -226,7 +295,6 @@ class StartMenuWindow(arcade.Window):
             pass
 
         arcade.run()
-        self.close()
 
     def continue_game(self):
         """Продолжение сохраненной игры"""
@@ -256,17 +324,18 @@ class StartMenuWindow(arcade.Window):
             arcade.draw_text(
                 f"Игрок: {self.current_user}",
                 10, self.height - 30,
-                arcade.color.LIGHT_GRAY, 14
+                arcade.color.LIGHT_GRAY, 14,
+                font_name="Courier New"
             )
             arcade.draw_text(
                 f"Уровней пройдено: {stats.get('unlocked_levels', 1)}",
                 10, self.height - 50,
-                arcade.color.LIGHT_GRAY, 12
+                arcade.color.LIGHT_GRAY, 12,
+                font_name="Courier New"
             )
 
     def on_update(self, delta_time: float):
         """Обновление анимации"""
-        # Инициализируем звезды, если их еще нет
         if not hasattr(self, 'stars'):
             self.stars = []
             for _ in range(100):
@@ -278,7 +347,6 @@ class StartMenuWindow(arcade.Window):
                     'brightness': random.uniform(0.3, 1.0)
                 })
 
-        # Анимируем звезды
         for star in self.stars:
             star['y'] += star['speed']
             if star['y'] > self.height:
@@ -289,7 +357,6 @@ class StartMenuWindow(arcade.Window):
         """Закрытие окна"""
         self.db.close()
         super().on_close()
-
 
 class LevelCompleteWindow(arcade.Window):
     """Окно после успешного прохождения уровня"""
