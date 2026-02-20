@@ -1,7 +1,8 @@
 import arcade
 import math
 from typing import Any
-from sprite_list import bad_bullet # для добавления пуль
+from sprite_list import bad_bullet, buildings  # добавлен buildings
+# from core import Core  # для проверки типа
 
 
 T_SIZE = 80  # пикселей на клетку
@@ -63,7 +64,7 @@ class Bug(arcade.Sprite):
     def __init__(self, filename: str, scale: float, x: float, y: float, core: Any,
                  hp: int, damage: int, speed: float, is_ranged: bool,
                  attack_range: float = 0, attack_cooldown_time: float = 1.0,
-                 name: str = "Жук"):
+                 name: str = "Жук", targets_buildings: bool = False):
         super().__init__(filename, scale)
         self.center_x = x
         self.center_y = y
@@ -79,6 +80,7 @@ class Bug(arcade.Sprite):
         self.attack_cooldown = 0.0
         self.name = name
         self.target = None
+        self.targets_buildings = targets_buildings  # может ли атаковать здания
 
     def update(self, delta_time: float):
         if self.attack_cooldown > 0:
@@ -87,7 +89,7 @@ class Bug(arcade.Sprite):
         if self.target and hasattr(self.target, 'hp') and self.target.hp > 0:
             dx = self.center_x - self.target.center_x
             dy = self.center_y - self.target.center_y
-            distance = math.sqrt(dx*dx + dy*dy)
+            distance = math.hypot(dx, dy)
 
             if self.is_ranged:
                 if distance <= self.attack_range and self.attack_cooldown <= 0:
@@ -97,14 +99,16 @@ class Bug(arcade.Sprite):
                     if self.attack_cooldown <= 0:
                         self.attack_target(self.target)
                 else:
-                    self.move_towards_core(delta_time)
+                    self.move_towards_target(delta_time)
         else:
             self.find_target()
-            self.move_towards_core(delta_time)
+            self.move_towards_target(delta_time)
 
     def find_target(self):
-        """Поиск ближайшей цели (игрок или ядро)"""
-        # Ищем игрока
+        """Поиск ближайшей цели: игрок -> (опционально здание) -> ядро"""
+        from sprite_list import players  # локальный импорт, чтобы избежать циклических зависимостей
+
+        # 1. Ищем игрока
         if players:
             player = None
             min_dist = float('inf')
@@ -112,7 +116,7 @@ class Bug(arcade.Sprite):
                 if p.hp > 0:
                     dx = self.center_x - p.center_x
                     dy = self.center_y - p.center_y
-                    dist = math.sqrt(dx*dx + dy*dy)
+                    dist = math.hypot(dx, dy)
                     if dist < min_dist:
                         min_dist = dist
                         player = p
@@ -122,24 +126,54 @@ class Bug(arcade.Sprite):
                         self.target = player
                         return
                 else:
-                    if min_dist <= T_SIZE * 2:
+                    if min_dist <= T_SIZE * 2:  # дальность привлечения ближнего боя
                         self.target = player
                         return
 
-        # Если игрока нет или он далеко, цель - ядро
+        # 2. Если враг может атаковать здания, ищем ближайшее
+        if self.targets_buildings:
+            nearest_building = None
+            min_dist = float('inf')
+            for b in buildings:
+                if b.hp > 0 and not getattr(b, 'is_core', False):  # исключаем ядро, чтобы оно оставалось главной целью
+                    dx = self.center_x - b.center_x
+                    dy = self.center_y - b.center_y
+                    dist = math.hypot(dx, dy)
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_building = b
+            if nearest_building:
+                if self.is_ranged:
+                    if min_dist <= self.attack_range:
+                        self.target = nearest_building
+                        return
+                else:
+                    # Для ближнего боя здание может быть целью, даже если далеко (пойдет к нему)
+                    self.target = nearest_building
+                    return
+
+        # 3. Если ничего не нашли, цель — ядро
         if self.core and self.core.hp > 0:
             self.target = self.core
         else:
             self.target = None
 
-    def move_towards_core(self, delta_time: float):
-        """Движение жука строго вниз к ядру"""
-        self.center_y -= self.speed_pixels * delta_time
+    def move_towards_target(self, delta_time: float):
+        """Движение к текущей цели по прямой"""
+        if self.target is None:
+            return
 
-        # Если достигли ядра, атакуем его
-        if self.core and self.center_y <= self.core.center_y + T_SIZE/2:
-            if self.attack_cooldown <= 0:
-                self.attack_target(self.core)
+        dx = self.target.center_x - self.center_x
+        dy = self.target.center_y - self.center_y
+        distance = math.hypot(dx, dy)
+
+        if distance < 1:
+            return
+
+        norm_x = dx / distance
+        norm_y = dy / distance
+        self.center_x += norm_x * self.speed_pixels * delta_time
+        self.center_y += norm_y * self.speed_pixels * delta_time
 
     def attack_target(self, target: Any):
         """Атака цели"""
@@ -178,7 +212,8 @@ class Beetle(Bug):
             filename="Изображения/Жуки/Обычный/Жук.png",
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=1, damage=1, speed=3.0, is_ranged=False,
-            attack_cooldown_time=0.5, name="Обычный жук"
+            attack_cooldown_time=0.5, name="Обычный жук",
+            targets_buildings=False
         )
 
 class ArmoredBeetle(Bug):
@@ -187,7 +222,8 @@ class ArmoredBeetle(Bug):
             filename="Изображения/Жуки/Крепкий/Жук брониосиц.png",
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=3, damage=1, speed=1.0, is_ranged=False,
-            attack_cooldown_time=0.5, name="Броненосец"
+            attack_cooldown_time=0.5, name="Броненосец",
+            targets_buildings=True   # может атаковать здания
         )
 
 class SpittingBeetle(Bug):
@@ -197,7 +233,8 @@ class SpittingBeetle(Bug):
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=1, damage=2, speed=2.0, is_ranged=True,
             attack_range=5 * T_SIZE, attack_cooldown_time=2.0,
-            name="Жук-плевок"
+            name="Жук-плевок",
+            targets_buildings=False
         )
 
 class DominicTorettoBeetle(Bug):
@@ -206,7 +243,8 @@ class DominicTorettoBeetle(Bug):
             filename="Изображения/Жуки/Доминико/Жук доминико.png",  # уточните путь
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=2, damage=2, speed=3.0, is_ranged=False,
-            attack_cooldown_time=0.5, name="Доминико Торетто"
+            attack_cooldown_time=0.5, name="Доминико Торетто",
+            targets_buildings=False
         )
 
 class HarkerBeetle(Bug):
@@ -216,5 +254,6 @@ class HarkerBeetle(Bug):
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=2, damage=3, speed=1.0, is_ranged=True,
             attack_range=7 * T_SIZE, attack_cooldown_time=3.0,
-            name="Жук-харкатель"
+            name="Жук-харкатель",
+            targets_buildings=True   # может атаковать здания
         )

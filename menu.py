@@ -279,10 +279,15 @@ class StartMenuWindow(arcade.Window):
     def start_level(self, level_number: int):
         """Запуск выбранного уровня"""
         from game import MyGame
+        import time
 
-        # Закрываем окно меню перед открытием игры
+        # Закрываем окно меню
         self.close()
 
+        # Даём время на освобождение ресурсов OpenGL
+        time.sleep(0.1)
+
+        # Создаём и запускаем игру
         game = MyGame(800, 600, f"Уровень {level_number}", level_number=level_number)
         game.current_user_id = self.current_user_id
         game.current_user = self.current_user

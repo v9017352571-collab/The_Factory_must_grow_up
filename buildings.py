@@ -1,4 +1,5 @@
 # buildings.py
+from __future__ import annotations
 import arcade
 from typing import Dict
 from collections import deque
@@ -7,7 +8,7 @@ import math
 from constants import *
 from resources import ResourceTransaction, ResourceStorage
 from sprite_list import good_bullet, bugs
-from enemies import Bug
+# from enemies import Bug
 
 # Константы здоровья (из constants.py)
 T_SIZE = 80

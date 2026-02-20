@@ -169,6 +169,8 @@ class MyGame(arcade.Window):
                 emitter.update()
             self.emitters = [e for e in self.emitters if e.get_count() > 0]
             self.update_waves(delta_time)
+            for bug in bugs:
+                bug.update(delta_time)
             self.destroy_building()
             self.drone_destruction()
             self.bullet_b()

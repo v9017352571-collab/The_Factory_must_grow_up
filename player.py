@@ -2,7 +2,7 @@
 import arcade
 from typing import Optional, Any
 from constants import T_SIZE, SPRITE_SCALE, PLAYER_PICKUP_DISTANCE, PLAYER_DROP_DISTANCE, PLAYER_SPEED
-
+from buildings import Building  # добавлен импорт для аннотации
 
 class Player(arcade.Sprite):
     """Класс игрока - космический аппарат"""
@@ -258,7 +258,7 @@ class Player(arcade.Sprite):
         self.dx = 0
         self.dy = 0
 
-    def pickup_resource(self, building: 'Building') -> bool:
+    def pickup_resource(self, building: Building) -> bool:
         """
         Подбор ресурса из здания
 
@@ -291,31 +291,15 @@ class Player(arcade.Sprite):
         if self.cargo is not None:
             return False
 
-        # Проверяем, что здание может отдать ресурс
-        if not building.can_give_resource():
-            return False
-
-        # Получаем тип ресурса из здания
-        # Предполагаем, что здание имеет метод get_resource_type()
-        if hasattr(building, 'output_resource'):
-            resource_type = building.output_resource
-        else:
-            # Для ядра или других зданий
-            for res, amount in building.resources.items():
-                if amount > 0:
-                    resource_type = res
-                    break
-            else:
-                return False
-
-        # Пытаемся забрать ресурс
-        if building.consume_resource(resource_type, 1):
-            self.cargo = resource_type
-            return True
-
+        # Ищем любой ресурс в хранилище здания
+        for resource, amount in building.storage.get_all().items():
+            if amount > 0:
+                if building.storage.remove(resource, 1):
+                    self.cargo = resource
+                    return True
         return False
 
-    def drop_resource(self, building: 'Building') -> bool:
+    def drop_resource(self, building: Building) -> bool:
         """
         Отдача ресурса в здание
 
@@ -349,14 +333,13 @@ class Player(arcade.Sprite):
             return False
 
         # Проверяем, что здание может принять ресурс
-        if not building.can_accept(self.cargo):
+        if not building.storage.can_add(self.cargo, 1):
             return False
 
         # Пытаемся отдать ресурс
-        if building.accept_resource(self.cargo):
+        if building.storage.add(self.cargo, 1):
             self.cargo = None
             return True
-
         return False
 
     def is_invulnerable(self) -> bool:
