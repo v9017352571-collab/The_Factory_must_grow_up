@@ -22,7 +22,7 @@ BUILDING_HP = {
 
 
 # =========== БАЗОВЫЙ КЛАСС Building ===========
-class Building(arcade.Sprite):
+class Building(arcade.Sprite, ResourceStorage):
     """Базовый класс для всех зданий"""
 
     def __init__(
@@ -37,7 +37,8 @@ class Building(arcade.Sprite):
             storage_capacity: Dict[str, int] = None,
             size: int = 1
     ):
-        super().__init__(image_path, scale)
+        arcade.Sprite.__init__(self, image_path, scale)
+        ResourceStorage.__init__(self, storage_capacity)
 
         # Основные свойства
         self.center_x = x
@@ -52,7 +53,6 @@ class Building(arcade.Sprite):
 
         # Ресурсы
         self.cost = cost
-        self.storage = ResourceStorage(storage_capacity)
 
         # Для производства
         self.production_timer = 0.0
@@ -136,7 +136,7 @@ class Building(arcade.Sprite):
         if not cargo:
             return False
 
-        if self.storage.can_add(cargo, 1) and self.storage.add(cargo, 1):
+        if self.can_add(cargo, 1) and self.add(cargo, 1):
             drone.unload()
             return True
         return False
@@ -150,14 +150,14 @@ class Building(arcade.Sprite):
         needed = drone.get_needed_resource()
         if not needed:
             # Берём первый доступный
-            for res, amt in self.storage.get_all().items():
+            for res, amt in self.get_all().items():
                 if amt > 0:
                     needed = res
                     break
             if not needed:
                 return False
 
-        if self.storage.has(needed, 1) and self.storage.remove(needed, 1):
+        if self.has(needed, 1) and self.remove(needed, 1):
             drone.load(needed)
             return True
         return False
@@ -165,7 +165,7 @@ class Building(arcade.Sprite):
     def _destroy(self):
         """Полное уничтожение здания"""
         self.is_destroyed = True
-        self.storage.clear()
+        self.clear()
 
         # Оповещаем дронов
         for drone in list(self.attached_drones):
@@ -180,13 +180,11 @@ class Building(arcade.Sprite):
 
     def can_accept(self, resource: str) -> bool:
         """Может ли принять ресурс?"""
-        return self.storage.can_add(resource, 1)
+        pass
 
     def has_resource(self, resource: str = None) -> bool:
         """Есть ли ресурс?"""
-        if resource:
-            return self.storage.has(resource, 1)
-        return not self.storage.is_empty()
+        pass
 
     def attach_drone(self, drone):
         """Привязать дрона"""
@@ -209,7 +207,7 @@ class Building(arcade.Sprite):
         return {
             "name": self.name,
             "hp": f"{self.hp}/{self.max_hp}",
-            "resources": str(self.storage),
+            "resources": str(self.get_all()),
             "production": f"{self.production_timer:.1f}/{self.production_time}s"
             if self.production_time > 0 else "Нет"
         }
@@ -262,13 +260,13 @@ class MineDrill(Building):
         """Добывает ресурс"""
         if self.needs_coal:
             # Проверяем есть ли уголь
-            if not self.storage.has("Уголь", 1):
+            if not self.has("Уголь", 1):
                 return
             # Тратим уголь
-            self.storage.remove("Уголь", 1)
+            self.remove("Уголь", 1)
 
         # Добываем ресурс
-        self.storage.add(self.resource_type, 1)
+        self.add(self.resource_type, 1)
 
 
 class CoalDrill(MineDrill):
@@ -346,19 +344,19 @@ class ProductionBuilding(Building):
         """Производит выходной ресурс"""
         # 1. Проверяем все ли ингредиенты есть
         for ingredient, amount in self.recipe.items():
-            if not self.storage.has(ingredient, amount):
+            if not self.has(ingredient, amount):
                 return  # Не хватает чего-то
 
         # 2. Проверяем есть ли место для продукта
-        if not self.storage.can_add(self.output, 1):
+        if not self.can_add(self.output, 1):
             return  # Нет места
 
         # 3. Забираем ингредиенты
         for ingredient, amount in self.recipe.items():
-            self.storage.remove(ingredient, amount)
+            self.remove(ingredient, amount)
 
         # 4. Добавляем продукт
-        self.storage.add(self.output, 1)
+        self.add(self.output, 1)
 
 
 class BronzeFurnace(ProductionBuilding):
@@ -496,7 +494,7 @@ class Turret(Building):
         # self.bullets.update() # update в игре через единый список для всех пуль
 
         # Если перезарядились и есть патроны - ищем цель
-        if self.current_cooldown <= 0 and self.storage.has(self.ammo_type, self.ammo_per_shot):
+        if self.current_cooldown <= 0 and self.has(self.ammo_type, self.ammo_per_shot):
             if self._find_target():
                 self._shoot()
 
@@ -520,7 +518,7 @@ class Turret(Building):
     def _shoot(self):
         """Производит выстрел"""
         # Тратим патроны
-        if not self.storage.remove(self.ammo_type, self.ammo_per_shot):
+        if not self.remove(self.ammo_type, self.ammo_per_shot):
             return
 
         self.current_cooldown = self.cooldown_time
