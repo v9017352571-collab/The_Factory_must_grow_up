@@ -85,6 +85,11 @@ class ResourceStorage:
         self.resources[resource] -= amount
         return True
 
+    def remove_all(self, resources: dict):
+        """забирает все ресурсы из словаря"""
+        for resource, amount in resources.items():
+            self.remove(resource, amount)
+
     def get_amount(self, resource: str) -> int:
         """Сколько есть ресурса?"""
         return self.resources.get(resource, 0)
