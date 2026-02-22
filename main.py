@@ -1,7 +1,4 @@
-# main.py
-import arcade
-from database import init_database
-from menu import StartMenuWindow
+from menu import StartMenuWindow, arcade
 
 
 def main():

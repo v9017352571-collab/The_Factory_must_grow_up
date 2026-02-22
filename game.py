@@ -88,12 +88,7 @@ class MyGame(arcade.Window):
         """
         Загрузка карты из файла, указанного в self.map_json.
         """
-        try:
-            self.map = arcade.load_tilemap(self.map_json)
-        except Exception as e:
-            print(f"Не удалось загрузить карту {self.map_json}: {e}. Используется тестовая карта.")
-            self.map = arcade.load_tilemap(":resources:/tiled_maps/level_1.json")
-
+        self.map = arcade.load_tilemap(self.map_json, scaling=SPRITE_SCALE)
         self.map_width = self.map.width
         self.map_height = self.map.height
         self.map_width_pixels = self.map_width * T_SIZE
@@ -114,7 +109,7 @@ class MyGame(arcade.Window):
         self.resource_count_texts = {}
 
     def setup(self):
-        self.core = Core(SPRITE_SCALE, 200, 200)
+        self.core = Core(SPRITE_SCALE, 520, 520)
         buildings.append(self.core)
         self.player = Player("Изображения/Остальное/Нгг.png", SPRITE_SCALE, self.core)
         players.append(self.player)
@@ -123,34 +118,33 @@ class MyGame(arcade.Window):
         self.setup_ui()
 
     def cam(self):
+        # Получаем текущую позицию камеры
         cam_x, cam_y = self.world_camera.position
-        dz_left = cam_x - 50 // 2
-        dz_right = cam_x + 50 // 2
-        dz_bottom = cam_y - 50 // 2
-        dz_top = cam_y + 50 // 2
 
+        # Получаем позицию игрока
         px, py = self.player.center_x, self.player.center_y
-        target_x, target_y = cam_x, cam_y
 
-        if px < dz_left:
-            target_x = px + 50 // 2
-        elif px > dz_right:
-            target_x = px - 50 // 2
-        if py < dz_bottom:
-            target_y = py + 50 // 2
-        elif py > dz_top:
-            target_y = py - 50 // 2
+        # Вычисляем целевую позицию камеры (позиция игрока)
+        target_x, target_y = px, py
 
-        half_w = int(self.world_camera.viewport_width / 2)
-        half_h = int(self.world_camera.viewport_height / 2)
-        target_x = max(half_w, min(int(self.map_width_pixels) - half_w, target_x))
-        target_y = max(half_h, min(int(self.map_height_pixels) - half_h, target_y))
+        # Ограничение по горизонтали
+        half_w = self.world_camera.viewport_width / 2
+        min_x = half_w
+        max_x = self.map_width_pixels - half_w
+        target_x = max(min_x, min(max_x, target_x))
 
+        # Ограничение по вертикали
+        half_h = self.world_camera.viewport_height / 2
+        min_y = half_h
+        max_y = self.map_height_pixels - half_h
+        target_y = max(min_y, min(max_y, target_y))
+
+        # Плавный переход к целевой позиции
         smooth_x = (1 - CAMERA_LERP) * cam_x + CAMERA_LERP * target_x
         smooth_y = (1 - CAMERA_LERP) * cam_y + CAMERA_LERP * target_y
-        self.cam_target = (smooth_x, smooth_y)
 
-        self.world_camera.position = (self.cam_target[0], self.cam_target[1])
+        # Устанавливаем позицию камеры
+        self.world_camera.position = (smooth_x, smooth_y)
 
     def on_update(self, delta_time: float):
         if self.game_state == 'game':
@@ -159,12 +153,10 @@ class MyGame(arcade.Window):
                 self.player.handle_movement(delta_time, self.pressed_keys)
                 self.player.update(delta_time)
 
-            position = (self.player.center_x, self.player.center_y)
-            self.world_camera.position = arcade.math.lerp_2d(
-                self.world_camera.position,
-                position,
-                0.5,
-            )
+                # ДОБАВЬТЕ ЭТОТ КОД для ограничения игрока внутри карты
+                self.player.center_x = max(T_SIZE // 2, min(self.map_width_pixels - T_SIZE // 2, self.player.center_x))
+                self.player.center_y = max(T_SIZE // 2, min(self.map_height_pixels - T_SIZE // 2, self.player.center_y))
+
             for emitter in self.emitters:
                 emitter.update()
             self.emitters = [e for e in self.emitters if e.get_count() > 0]
@@ -266,6 +258,9 @@ class MyGame(arcade.Window):
     def on_draw(self):
         self.clear()
         self.world_camera.use()
+        if self.map:
+            for layer_name, layer in self.map.sprite_lists.items():
+                layer.draw()
         self.ui_dr()
         bugs.draw()
         buildings.draw()
@@ -386,7 +381,7 @@ class MyGame(arcade.Window):
             x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
             for i in buildings:
                 if i.center_x == x3 and i.center_y == y3:
-                    self.information_about_the_building = i.resources
+                    self.information_about_the_building = i.storage.get_all()
                     return
             self.information_about_the_building = {}
 
@@ -434,10 +429,13 @@ class MyGame(arcade.Window):
         for t in buildings:
             if not t.max_hp == 20:
                 if self.rote_dron and t.center_x == x3 and t.center_y == y3:
-                    if self.rote_dron != True:
-                        players.append(Drone(self.rote_dron.append(t)))
-                        self.rote_dron = False
-                        # self.core.add_resource("Кремний", -3) и т.д. (нужно реализовать)
+                    if not self.rote_dron:
+                        if self.core.storage.has("Кремний", 1) and self.core.storage.has("Медь", 5) and self.core.storage.has("Олово", ):
+                            self.core.storage.remove("Кремний", 1)
+                            self.core.storage.remove("Олово", 3)
+                            self.core.storage.remove("Медь", 5)
+                            players.append(Drone(self.rote_dron.append(t)))
+                            self.rote_dron = False
                         return
                     else:
                         self.rote_dron = [t]
