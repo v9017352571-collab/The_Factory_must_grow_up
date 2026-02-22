@@ -5,6 +5,7 @@ from arcade.gui import UIManager, UIBoxLayout, UIFlatButton, UILabel, UIInputTex
 from typing import Dict, List, Tuple, Optional, Any, Callable
 from datetime import datetime
 from database import GameDatabase
+from constants import MUSIC_MENU
 
 
 class StartMenuWindow(arcade.Window):
@@ -118,6 +119,8 @@ class StartMenuWindow(arcade.Window):
             height=40,
             style=button_style
         )
+        self.ost = arcade.play_sound(MUSIC_MENU, volume=True)
+
 
         @login_button.event("on_click")
         def on_login(event):
@@ -278,28 +281,18 @@ class StartMenuWindow(arcade.Window):
 
     def start_level(self, level_number: int):
         """Запуск выбранного уровня"""
+        """Запуск выбранного уровня"""
         from game import MyGame
-        import time
 
-        # Закрываем окно меню
-        self.close()
-
-        # Даём время на освобождение ресурсов OpenGL
-        time.sleep(0.1)
-
-        # Создаём и запускаем игру
+        # Создаём окно игры ПЕРВЫМ (до закрытия меню)
         game = MyGame(800, 600, f"Уровень {level_number}", level_number=level_number)
         game.current_user_id = self.current_user_id
         game.current_user = self.current_user
         game.current_level = level_number
-
-        # Загружаем сохранённое состояние, если есть
-        saved_state = self.db.load_game_state(self.current_user_id)
-        if saved_state:
-            # Здесь можно восстановить состояние игры
-            pass
-
+        arcade.stop_sound(self.ost)
         arcade.run()
+        # Закрываем меню
+        self.close()
 
     def continue_game(self):
         """Продолжение сохраненной игры"""
@@ -1104,3 +1097,27 @@ class FinalResultsWindow(arcade.Window):
         """Закрытие окна"""
         self.db.close()
         super().on_close()
+
+
+def main():
+    """
+    Точка входа в игру
+
+    Задачи:
+    - Создает окно стартового меню
+    - Запускает игровой цикл
+    - Обрабатывает закрытие приложения
+
+    Особенности:
+    - Размер окна: 800x600 пикселей
+    - Заголовок: "Заводы и Тауэр Дефенс"
+    - Автоматический выход при закрытии окна
+    """
+
+    window = StartMenuWindow(800, 600, "Заводы и Тауэр Дефенс")
+    window.set_update_rate(1 / 60)
+    arcade.run()
+
+
+if __name__ == "__main__":
+    main()
