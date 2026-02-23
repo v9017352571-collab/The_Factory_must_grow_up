@@ -1,60 +1,54 @@
-# game.py
 import arcade
-from arcade.gui import UIManager
 import math
 import random
-
 from arcade.math import rand_in_circle, rand_on_circle
 from arcade.particles import Emitter, EmitBurst, LifetimeParticle
 
 from constants import (
-    T_SIZE, SPRITE_SCALE, BUILDING_HP, BUILDING_KEYS, BAGS,
-    CAMERA_LERP, RESOURCES, TEXTYRE,
-    MUSIC_MENU, MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_ATTACKS1, MUSIC_UNITED3,
+    T_SIZE, SPRITE_SCALE, BUILDING_KEYS, BAGS,
+    CAMERA_LERP, TEXTYRE,
+    MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_ATTACKS1, MUSIC_UNITED3,
     MUSIC_ATTACKS2, MUSIC_ATTACKS3, HIT,
-    LEVELS, CURRENT_LEVEL   # импортируем данные уровней и номер по умолчанию
+    LEVELS
 )
 from sprite_list import good_bullet, bad_bullet, players, buildings, bugs
 from core import Core
 from player import Player
-from buildings import (Building, ElectricDrill,
-                       BronzeFurnace, SiliconFurnace, AmmoFactory,
-                       CopperTurret, BronzeTurret, LongRangeTurret)
+from buildings import ElectricDrill, BronzeFurnace, SiliconFurnace, AmmoFactory, \
+    CopperTurret, BronzeTurret, LongRangeTurret
 from drones import Drone
-from enemies import (Bug, Beetle, ArmoredBeetle, SpittingBeetle,
-                     DominicTorettoBeetle, HarkerBeetle)
+from enemies import Beetle, ArmoredBeetle, SpittingBeetle, DominicTorettoBeetle, HarkerBeetle
+from menu import LevelCompleteView, GameOverView, FinalResultsView
 
 
-class MyGame(arcade.Window):
-    """Основной класс игры - управляет всем игровым процессом"""
+class GameView(arcade.View):
+    """Основной игровой процесс"""
 
-    def __init__(self, width: int, height: int, title: str, level_number: int = None):
-        super().__init__(width, height, title)
+    def __init__(self, level_number: int, user_id: int, username: str):
+        super().__init__()
+        self.current_level = level_number
+        self.user_id = user_id
+        self.username = username
 
-        # Определяем номер текущего уровня (из параметра или константы)
-        self.current_level = level_number if level_number is not None else CURRENT_LEVEL
-
-        # Загружаем данные уровня из словаря LEVELS
         level_data = LEVELS.get(self.current_level)
         if level_data is None:
-            print(f"Ошибка: данные для уровня {self.current_level} не найдены. Используется уровень 1.")
+            print(f"Ошибка: уровень {self.current_level} не найден. Используется уровень 1.")
             level_data = LEVELS[1]
             self.current_level = 1
 
-        self.waves = level_data["waves"]          # список волн
-        self.map_json = level_data["map"]         # имя файла карты
+        self.waves = level_data["waves"]
+        self.map_json = level_data["map"]
 
-        # Инициализация камер и т.п.
-        self.txtt = None
+        # Камеры
         self.world_camera = arcade.camera.Camera2D()
         self.gui_camera = arcade.camera.Camera2D()
         self.cam_target = (0, 0)
 
-        # Система волн
+        # Волны
         self.current_wave_index = 0
         self.wave_timer = 100
 
-        # Состояние игры
+        # Состояние
         self.game_state = "game"
         self.pressed_keys = set()
         self.grid = None
@@ -64,30 +58,47 @@ class MyGame(arcade.Window):
         self.rote_dron = False
         self.information_about_the_building = {}
 
-        # Параметры карты (будут установлены в load_map)
+        # Карта
         self.map_height_pixels = None
         self.map_width_pixels = None
         self.map_height = None
         self.map_width = None
         self.map = None
 
-        self.setup()
-        self.load_map()
+        # Спрайты и эффекты
         self.buildings = arcade.SpriteList()
         self.bullets = arcade.SpriteList()
         self.bugs = arcade.SpriteList()
         self.drones = arcade.SpriteList()
-        self.grid = None
         self.resource_icons = arcade.SpriteList()
         self.emitters = []
+
         self.star_texture = arcade.load_texture("Изображения/Остальное/Пуля.png")
         self.orb_texture = arcade.load_texture("Изображения/Остальное/Камень.png")
+
+        self.wave_timer_text = None
+        self.resource_textures = {}
+        self.resource_count_texts = {}
+        self.ost = None
+        self.ost_UNITED = True
+
+    def on_show_view(self):
+        arcade.set_background_color(arcade.color.BLACK)
+        self.setup()
+        self.load_map()
         self.pausa_dui()
 
+    def on_hide_view(self):
+        # Очищаем глобальные списки спрайтов, чтобы не оставались в памяти
+        players.clear()
+        buildings.clear()
+        bugs.clear()
+        good_bullet.clear()
+        bad_bullet.clear()
+        if self.ost:
+            arcade.stop_sound(self.ost)
+
     def load_map(self):
-        """
-        Загрузка карты из файла, указанного в self.map_json.
-        """
         self.map = arcade.load_tilemap(self.map_json, scaling=SPRITE_SCALE)
         self.map_width = self.map.width
         self.map_height = self.map.height
@@ -95,7 +106,7 @@ class MyGame(arcade.Window):
         self.map_height_pixels = self.map_height * T_SIZE
 
     def setup_ui(self):
-        window = arcade.get_window()
+        window = self.window
         self.wave_timer_text = arcade.Text(
             text="0",
             x=window.width // 2,
@@ -105,8 +116,6 @@ class MyGame(arcade.Window):
             anchor_x="center",
             anchor_y="top"
         )
-        self.resource_textures = {}
-        self.resource_count_texts = {}
 
     def setup(self):
         self.core = Core(SPRITE_SCALE, 520, 520)
@@ -118,32 +127,24 @@ class MyGame(arcade.Window):
         self.setup_ui()
 
     def cam(self):
-        # Получаем текущую позицию камеры
         cam_x, cam_y = self.world_camera.position
-
-        # Получаем позицию игрока
         px, py = self.player.center_x, self.player.center_y
 
-        # Вычисляем целевую позицию камеры (позиция игрока)
         target_x, target_y = px, py
 
-        # Ограничение по горизонтали
         half_w = self.world_camera.viewport_width / 2
         min_x = half_w
         max_x = self.map_width_pixels - half_w
         target_x = max(min_x, min(max_x, target_x))
 
-        # Ограничение по вертикали
         half_h = self.world_camera.viewport_height / 2
         min_y = half_h
         max_y = self.map_height_pixels - half_h
         target_y = max(min_y, min(max_y, target_y))
 
-        # Плавный переход к целевой позиции
         smooth_x = (1 - CAMERA_LERP) * cam_x + CAMERA_LERP * target_x
         smooth_y = (1 - CAMERA_LERP) * cam_y + CAMERA_LERP * target_y
 
-        # Устанавливаем позицию камеры
         self.world_camera.position = (smooth_x, smooth_y)
 
     def on_update(self, delta_time: float):
@@ -153,7 +154,6 @@ class MyGame(arcade.Window):
                 self.player.handle_movement(delta_time, self.pressed_keys)
                 self.player.update(delta_time)
 
-                # ДОБАВЬТЕ ЭТОТ КОД для ограничения игрока внутри карты
                 self.player.center_x = max(T_SIZE // 2, min(self.map_width_pixels - T_SIZE // 2, self.player.center_x))
                 self.player.center_y = max(T_SIZE // 2, min(self.map_height_pixels - T_SIZE // 2, self.player.center_y))
 
@@ -179,7 +179,6 @@ class MyGame(arcade.Window):
         if self.wave_timer <= 0:
             if self.current_wave_index < len(self.waves):
                 for bug_name in self.waves[self.current_wave_index]:
-                    # Спавн врага
                     if random.randint(0, 1):
                         x = random.randint(0, self.map_width_pixels)
                         y = 0
@@ -191,16 +190,15 @@ class MyGame(arcade.Window):
                         bugs.append(bug_class(x, y, self.core))
                 self.current_wave_index += 1
                 self.wave_timer = 100
-                arcade.stop_sound(self.ost)
+                if self.ost:
+                    arcade.stop_sound(self.ost)
                 self.ost = arcade.play_sound(random.choice([MUSIC_ATTACKS2, MUSIC_ATTACKS1, MUSIC_ATTACKS3]), volume=True)
                 self.ost_UNITED = False
-            else:
-                # Волны закончились, просто ждём
-                pass
 
         if len(bugs) <= 5:
             if not self.ost_UNITED:
-                arcade.stop_sound(self.ost)
+                if self.ost:
+                    arcade.stop_sound(self.ost)
                 self.ost = arcade.play_sound(random.choice([MUSIC_UNITED2, MUSIC_UNITED1, MUSIC_UNITED3]), volume=True)
                 self.ost_UNITED = True
 
@@ -279,7 +277,7 @@ class MyGame(arcade.Window):
             self.ui_manager.draw()
 
     def ui_dr(self):
-        window = arcade.get_window()
+        window = self.window
         screen_width = window.width
         screen_height = window.height
 
@@ -292,7 +290,6 @@ class MyGame(arcade.Window):
         self.wave_timer_text.draw()
 
         right_margin = 60
-        start_y = screen_height - 60
         vertical_spacing = 45
 
         if self.information_about_the_building:
@@ -333,11 +330,9 @@ class MyGame(arcade.Window):
         self.resource_icons.draw()
 
     def pausa_dui(self):
-        window = arcade.get_window()
-        screen_width = self.world_camera.width
-        screen_height = self.world_camera.height
+        screen_width = self.window.width
+        screen_height = self.window.height
         self.ui_manager = arcade.gui.UIManager()
-        self.ui_manager.enable()
 
         input_field = arcade.gui.UIInputText(
             width=400,
@@ -357,7 +352,6 @@ class MyGame(arcade.Window):
         )
         save_button.center_x = screen_width // 2
         save_button.center_y = screen_height // 2
-        # save_button.on_click = lambda е: save_level_to_db(self.txtt, ...)
         self.ui_manager.add(save_button)
 
         back_button = arcade.gui.UIFlatButton(
@@ -413,9 +407,6 @@ class MyGame(arcade.Window):
                     if u.max_hp != 20:
                         if u.center_x == x3 and u.center_y == y3:
                             buildings.remove(u)
-                            # возврат ресурсов (упрощённо)
-                            # for res in u.cost.cost:  # нужно адаптировать под ResourceTransaction
-                            #     u.cost.cost[res] = int(u.cost.cost[res] / 2)
                             return
 
     def f_rote_dron(self, x, y):
@@ -430,7 +421,7 @@ class MyGame(arcade.Window):
             if not t.max_hp == 20:
                 if self.rote_dron and t.center_x == x3 and t.center_y == y3:
                     if not self.rote_dron:
-                        if self.core.storage.has("Кремний", 1) and self.core.storage.has("Медь", 5) and self.core.storage.has("Олово", ):
+                        if self.core.storage.has("Кремний", 1) and self.core.storage.has("Медь", 5) and self.core.storage.has("Олово", 3):
                             self.core.storage.remove("Кремний", 1)
                             self.core.storage.remove("Олово", 3)
                             self.core.storage.remove("Медь", 5)
@@ -447,7 +438,6 @@ class MyGame(arcade.Window):
             if dr.max_hp != 3:
                 if (x + x1) - dr.center_x < 5 and (y + y1) - dr.center_y < 5:
                     players.remove(dr)
-                    # self.core.add_resource("Кремний", 2) и т.д.
                     break
 
     def on_key_press(self, key: int, modifiers: int):
@@ -460,12 +450,95 @@ class MyGame(arcade.Window):
     def check_game_state(self):
         if self.core.hp <= 0:
             self.game_state = "game_over"
+            self.show_game_over("Ядро разрушено")
         elif self.current_wave_index >= len(self.waves) and len(bugs) == 0:
             self.game_state = "victory"
+            self.show_victory()
         elif arcade.key.ESCAPE in self.pressed_keys:
             self.game_state = "pause"
+            self.ui_manager.enable()
         else:
             self.game_state = "game"
+            self.ui_manager.disable()
+
+    def show_game_over(self, reason):
+        stats = {
+            'score': 0,
+            'enemies_killed': 0,
+            'time_survived': 0,
+            'waves_completed': self.current_wave_index,
+        }
+        game_over_view = GameOverView(
+            level_number=self.current_level,
+            reason=reason,
+            stats=stats,
+            user_id=self.user_id,
+            callback=self.handle_game_over
+        )
+        self.window.show_view(game_over_view)
+
+    def show_victory(self):
+        level_data = {
+            'level_number': self.current_level,
+            'score': 1000,  # Здесь надо посчитать реальные очки
+            'enemies_killed': 0,
+            'time_spent': 0,
+            'waves_completed': len(self.waves),
+            'resources_collected': 0,
+            'buildings_built': 0,
+            'drones_used': 0,
+        }
+        if self.current_level >= 3:
+            final_view = FinalResultsView(
+                total_stats={
+                    'total_score': 0,
+                    'total_enemies_killed': 0,
+                    'total_play_time': 0,
+                    'levels_completed': self.current_level,
+                },
+                user_id=self.user_id,
+                username=self.username,
+                callback=self.handle_final
+            )
+            self.window.show_view(final_view)
+        else:
+            complete_view = LevelCompleteView(
+                level_data=level_data,
+                user_id=self.user_id,
+                username=self.username,
+                callback=self.handle_level_complete
+            )
+            self.window.show_view(complete_view)
+
+    def handle_level_complete(self, action):
+        if action == 'next_level':
+            next_level = self.current_level + 1
+            game_view = GameView(next_level, self.user_id, self.username)
+            self.window.show_view(game_view)
+        elif action == 'retry_level':
+            game_view = GameView(self.current_level, self.user_id, self.username)
+            self.window.show_view(game_view)
+        elif action == 'to_menu':
+            self.return_to_menu()
+
+    def handle_game_over(self, action):
+        if action == 'retry_level':
+            game_view = GameView(self.current_level, self.user_id, self.username)
+            self.window.show_view(game_view)
+        elif action == 'to_menu':
+            self.return_to_menu()
+
+    def handle_final(self, action):
+        if action == 'new_game':
+            game_view = GameView(1, self.user_id, self.username)
+            self.window.show_view(game_view)
+        elif action == 'to_menu':
+            self.return_to_menu()
+
+    def return_to_menu(self):
+        from menu import StartMenuView
+        menu_view = StartMenuView()
+        self.window.show_view(menu_view)
 
     def destroy_building(self):
         for b in buildings:
@@ -494,38 +567,3 @@ class MyGame(arcade.Window):
             )
         )
         self.emitters.append(ring_emitter)
-
-
-def main():
-    window = MyGame(555, 555, "Заводы и Тауэр Дефенс")
-    arcade.run()
-
-
-if __name__ == "__main__":
-    main()
-
-
-class GameStats:
-    """Класс для хранения и обработки статистики игры"""
-    def __init__(self):
-        self.level_results = []
-        self.total_score = 0
-        self.total_enemies_killed = 0
-        self.total_play_time = 0.0
-        self.levels_completed = 0
-
-    def add_level_result(self, level_stats):
-        self.level_results.append(level_stats)
-        self.total_score += level_stats.get('score', 0)
-        self.total_enemies_killed += level_stats.get('enemies_killed', 0)
-        self.total_play_time += level_stats.get('time_spent', 0)
-        self.levels_completed += 1
-
-    def get_total_stats(self):
-        return {
-            'total_score': self.total_score,
-            'total_enemies_killed': self.total_enemies_killed,
-            'total_play_time': self.total_play_time,
-            'levels_completed': self.levels_completed,
-            'level_results': self.level_results
-        }

@@ -1,23 +1,15 @@
-from menu import StartMenuWindow, arcade
+import arcade
+from menu import StartMenuView
+
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+SCREEN_TITLE = "Заводы и Тауэр Дефенс"
 
 
 def main():
-    """
-    Точка входа в игру
-
-    Задачи:
-    - Создает окно стартового меню
-    - Запускает игровой цикл
-    - Обрабатывает закрытие приложения
-
-    Особенности:
-    - Размер окна: 800x600 пикселей
-    - Заголовок: "Заводы и Тауэр Дефенс"
-    - Автоматический выход при закрытии окна
-    """
-
-    window = StartMenuWindow(800, 600, "Заводы и Тауэр Дефенс")
-    window.set_update_rate(1 / 60)
+    window = arcade.Window(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
+    start_view = StartMenuView()
+    window.show_view(start_view)
     arcade.run()
 
 
