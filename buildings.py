@@ -4,6 +4,7 @@ from collections import deque
 from resources import ResourceTransaction, ResourceStorage
 from constants import good_bullet, bugs
 from enemies import Bug
+import math
 
 # Константы здоровья (из constants.py)
 T_SIZE = 80
@@ -481,6 +482,7 @@ class Turret(Building):
 
         # Для поиска цели
         self.target = None
+        self.velocity = (0, 0)
 
 
     def update(self, delta_time: float):
@@ -527,7 +529,11 @@ class Turret(Building):
 
         self.current_cooldown = self.cooldown_time
 
-        good_bullet.append(ShotBullet(self, target=self.target))
+        self.set_velocity()
+        self.calculate_angle()
+        #TODO: make a rotate tower
+
+        good_bullet.append(ShotBullet(self, target=self.target, velocity=self.velocity))
 
     def set_enemies(self, enemies_list = bugs):
         """для поиска цели"""
@@ -538,6 +544,20 @@ class Turret(Building):
 
     def calculate_range(self, x, y) -> float:
         return (x ** 2 + y ** 2) / self.radius ** 2
+
+    def set_velocity(self):
+        """устанавливает вектор движения пули"""
+        x_t, y_t = self.target.get_coords()
+        x, y = x_t - self.source.center, y_t - self.source.center_y
+        s = math.sqrt(x**2 + y**2)
+        self.velocity = (x / s, y / s)
+
+    def calculate_angle(self):
+        x, y = self.velocity
+        if x < 0 and y < 0: self.tower_angle = math.asin(self.velocity[1]) * 180 / math.pi - 180
+        elif x < 0 and y > 0: self.tower_angle = math.acos(self.velocity[0]) * 180 / math.pi
+        elif x > 0 and y < 0: self.tower_angle = math.asin(self.velocity[1]) * 180 / math.pi
+        elif x > 0 and y > 0: self.tower_angle = math.acos(self.velocity[0]) * 180 / math.pi
 
 
 class CopperTurret(Turret):
@@ -599,7 +619,7 @@ class LongRangeTurret(Turret):
 
 class ShotBullet(arcade.Sprite):
     """временный класс для выстрелов"""
-    def __init__(self, source: 'Turret', target: 'Bug'):
+    def __init__(self, source: 'Turret', target: 'Bug', velocity: tuple):
         super().__init__('Изображения/Остальное/Пуля.png', 0.05)
         self.center_x = source.center_x
         self.center_y = source.center_y
@@ -608,14 +628,8 @@ class ShotBullet(arcade.Sprite):
         self.bullet_speed = source.bullet_speed
         self.attack_range = source.attack_range
         self.target = target
-        self.velocity = (0.0, 0.0)
-        self.set_velocity()
+        self.velocity = velocity
 
-    def set_velocity(self):
-        """устанавливает вектор движения пули"""
-        x, y = self.target.center_x - self.source.center, self.target.center_y - self.source.center_y
-        s = x + y
-        self.velocity = (x / s, y / s)
 
     def update(self, delta_time: float):
         """двигаем пулю к цели"""
