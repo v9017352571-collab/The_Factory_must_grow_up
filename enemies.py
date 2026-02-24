@@ -209,22 +209,36 @@ class Bug(arcade.Sprite):
 class Beetle(Bug):
     def __init__(self, x: float, y: float, core: Any):
         super().__init__(
-            filename="Изображения/Жуки/Обычный/Жук.png",
+            filename='Изображения/Жуки/Обычный/Жук.png',
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=1, damage=1, speed=3.0, is_ranged=False,
             attack_cooldown_time=0.5, name="Обычный жук",
             targets_buildings=False
         )
+        self.textures = [arcade.load_texture(f'Изображения/Жуки/Обычный/Жук_ходьба_{i}.png') for i in range(4)]
+        self.step = 0
+        self.texture = self.textures[self.step]
+        self.t = 0
+
+    def update(self, dt):
+        super().update(dt)
+        self.t += dt
+        if self.t >= 0.1:
+            self.step = (self.step + 1) % 4
+            self.texture = self.textures[self.step]
+            self.t = 0
+
 
 class ArmoredBeetle(Bug):
     def __init__(self, x: float, y: float, core: Any):
         super().__init__(
-            filename="Изображения/Жуки/Крепкий/Жук брониосиц.png",
+            filename="Изображения/Жуки/Крепкий/Жук брониносиц.png",
             scale=SPRITE_SCALE, x=x, y=y, core=core,
             hp=3, damage=1, speed=1.0, is_ranged=False,
             attack_cooldown_time=0.5, name="Броненосец",
             targets_buildings=True   # может атаковать здания
         )
+
 
 class SpittingBeetle(Bug):
     def __init__(self, x: float, y: float, core: Any):

@@ -11,7 +11,7 @@ from constants import (
     MUSIC_ATTACKS2, MUSIC_ATTACKS3, HIT,
     LEVELS
 )
-from sprite_list import good_bullet, bad_bullet, players, buildings, bugs
+from sprite_list import good_bullet, bad_bullet, players, buildings, bugs, base_list
 from core import Core
 from player import Player
 from buildings import ElectricDrill, BronzeFurnace, SiliconFurnace, AmmoFactory, \
@@ -46,7 +46,7 @@ class GameView(arcade.View):
 
         # Волны
         self.current_wave_index = 0
-        self.wave_timer = 100
+        self.wave_timer = 10
 
         # Состояние
         self.game_state = "game"
@@ -156,6 +156,9 @@ class GameView(arcade.View):
         if self.game_state == 'game':
             self.total_time += delta_time
             self.cam()
+            buildings.update()
+            good_bullet.update()
+
             if players:
                 self.player.handle_movement(delta_time, self.pressed_keys)
                 self.player.update(delta_time)
@@ -224,7 +227,7 @@ class GameView(arcade.View):
                     for i in hit_list:
                         self.create_explosion(b.center_x, b.center_y)
                         i.take_damage(b.damage)
-                        good_bullet.remove(b)
+                        # good_bullet.remove(b)
                         arcade.play_sound(random.choice(HIT))
 
     def bullet_b(self):
@@ -259,7 +262,7 @@ class GameView(arcade.View):
                 filename_or_texture=self.star_texture,
                 change_xy=rand_in_circle((0, 0), 8.0),
                 lifetime=random.uniform(0.01, 0.2),
-                scale=random.uniform(0.1, 0.15),
+                scale=random.uniform(0.2, 0.5),
                 alpha=random.randint(25, 50)
             )
         )
@@ -272,8 +275,10 @@ class GameView(arcade.View):
             for layer_name, layer in self.map.sprite_lists.items():
                 layer.draw()
         self.ui_dr()
+        base_list.draw()
         buildings.draw()
         bugs.draw()
+        good_bullet.draw()
         if players:
             players.draw()
         for emitter in self.emitters:
