@@ -50,6 +50,11 @@ class GameView(arcade.View):
 
         # Состояние
         self.game_state = "game"
+        self.total_time = 0.0
+        self.enemies_killed = 0
+        self.buildings_built = 0
+        self.drones_used = 0
+        self.resources_collected = 0
         self.pressed_keys = set()
         self.grid = None
 
@@ -149,6 +154,7 @@ class GameView(arcade.View):
 
     def on_update(self, delta_time: float):
         if self.game_state == 'game':
+            self.total_time += delta_time
             self.cam()
             if players:
                 self.player.handle_movement(delta_time, self.pressed_keys)
@@ -172,9 +178,15 @@ class GameView(arcade.View):
     def update_waves(self, delta_time: float):
         self.wave_timer -= delta_time
 
+        # Собираем мёртвых жуков
+        dead_bugs = []
         for bug in bugs:
             if bug.hp <= 0:
-                bugs.remove(bug)
+                dead_bugs.append(bug)
+        # Удаляем и увеличиваем счётчик
+        for bug in dead_bugs:
+            bugs.remove(bug)
+            self.enemies_killed += 1
 
         if self.wave_timer <= 0:
             if self.current_wave_index < len(self.waves):
@@ -402,6 +414,7 @@ class GameView(arcade.View):
                     return
             if building:
                 buildings.append(building(x3, y3))
+                self.buildings_built += 1
                 return
 
             if arcade.key.DELETE == i:
@@ -428,6 +441,7 @@ class GameView(arcade.View):
                             self.core.remove("Олово", 3)
                             self.core.remove("Медь", 5)
                             players.append(Drone(self.rote_dron.append(t)))
+                            self.drones_used += 1
                             self.rote_dron = False
                         return
                     else:
@@ -466,9 +480,9 @@ class GameView(arcade.View):
     def show_game_over(self, reason):
         stats = {
             'score': 0,
-            'enemies_killed': 0,
-            'time_survived': 0,
-            'waves_completed': self.current_wave_index,
+            'enemies_killed': self.enemies_killed,
+            'time_survived': self.total_time,
+            'waves_completed': self.current_wave_index,  # сколько волн успели пережить
         }
         game_over_view = GameOverView(
             level_number=self.current_level,
@@ -482,21 +496,23 @@ class GameView(arcade.View):
     def show_victory(self):
         level_data = {
             'level_number': self.current_level,
-            'score': 1000,  # Здесь надо посчитать реальные очки
-            'enemies_killed': 0,
-            'time_spent': 0,
-            'waves_completed': len(self.waves),
-            'resources_collected': 0,
-            'buildings_built': 0,
-            'drones_used': 0,
+            'score': 1000,  # позже можно заменить на расчёт
+            'enemies_killed': self.enemies_killed,
+            'time_spent': self.total_time,
+            'waves_completed': len(self.waves),  # или self.current_wave_index, если нужны пройденные
+            'resources_collected': self.resources_collected,  # если считаете
+            'buildings_built': self.buildings_built,
+            'drones_used': self.drones_used,
         }
         if self.current_level >= 3:
             final_view = FinalResultsView(
                 total_stats={
                     'total_score': 0,
-                    'total_enemies_killed': 0,
-                    'total_play_time': 0,
+                    'total_enemies_killed': self.enemies_killed,
+                    'total_play_time': self.total_time,
                     'levels_completed': self.current_level,
+                    'total_buildings': self.buildings_built,
+                    'total_drones': self.drones_used,
                 },
                 user_id=self.user_id,
                 username=self.username,
