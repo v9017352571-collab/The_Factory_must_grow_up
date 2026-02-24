@@ -260,8 +260,8 @@ class GameView(arcade.View):
             for layer_name, layer in self.map.sprite_lists.items():
                 layer.draw()
         self.ui_dr()
-        bugs.draw()
         buildings.draw()
+        bugs.draw()
         if players:
             players.draw()
         for emitter in self.emitters:
@@ -284,6 +284,10 @@ class GameView(arcade.View):
         camera_left = self.world_camera.bottom_left[0]
         camera_bottom = self.world_camera.bottom_left[1]
 
+        # ОЧИСТКА СПРАЙТОВ РЕСУРСОВ КАЖДЫЙ КАДР - ЭТО ГЛАВНОЕ ИЗМЕНЕНИЕ!
+        self.resource_icons.clear()
+
+        # Обновление таймера волны
         self.wave_timer_text.x = camera_left + screen_width // 2
         self.wave_timer_text.y = camera_bottom + screen_height - 20
         self.wave_timer_text.text = str(int(self.wave_timer))
@@ -291,6 +295,9 @@ class GameView(arcade.View):
 
         right_margin = 60
         vertical_spacing = 45
+
+        # Очистка старых текстовых элементов
+        self.resource_count_texts.clear()
 
         if self.information_about_the_building:
             resources = self.information_about_the_building
@@ -310,22 +317,17 @@ class GameView(arcade.View):
                     sprite.scale = 0.25
                     self.resource_icons.append(sprite)
 
-                if resource_name not in self.resource_count_texts:
-                    self.resource_count_texts[resource_name] = arcade.Text(
-                        text=str(amount),
-                        x=text_x,
-                        y=text_y,
-                        color=arcade.color.WHITE,
-                        font_size=18,
-                        anchor_x="center",
-                        anchor_y="center"
-                    )
-                else:
-                    text_widget = self.resource_count_texts[resource_name]
-                    text_widget.text = str(amount)
-                    text_widget.x = text_x
-                    text_widget.y = text_y
-                    text_widget.draw()
+                # Создаем новый текстовый элемент для каждого ресурса
+                text_widget = arcade.Text(
+                    text=str(amount),
+                    x=text_x,
+                    y=text_y,
+                    color=arcade.color.WHITE,
+                    font_size=18,
+                    anchor_x="center",
+                    anchor_y="center"
+                )
+                text_widget.draw()
 
         self.resource_icons.draw()
 
@@ -375,7 +377,7 @@ class GameView(arcade.View):
             x3, y3 = x2 * T_SIZE + T_SIZE // 2, y2 * T_SIZE + T_SIZE // 2
             for i in buildings:
                 if i.center_x == x3 and i.center_y == y3:
-                    self.information_about_the_building = i.storage.get_all()
+                    self.information_about_the_building = i.get_all()
                     return
             self.information_about_the_building = {}
 
@@ -421,10 +423,10 @@ class GameView(arcade.View):
             if not t.max_hp == 20:
                 if self.rote_dron and t.center_x == x3 and t.center_y == y3:
                     if not self.rote_dron:
-                        if self.core.storage.has("Кремний", 1) and self.core.storage.has("Медь", 5) and self.core.storage.has("Олово", 3):
-                            self.core.storage.remove("Кремний", 1)
-                            self.core.storage.remove("Олово", 3)
-                            self.core.storage.remove("Медь", 5)
+                        if self.core.has("Кремний", 1) and self.core.has("Медь", 5) and self.core.has("Олово", 3):
+                            self.core.remove("Кремний", 1)
+                            self.core.remove("Олово", 3)
+                            self.core.remove("Медь", 5)
                             players.append(Drone(self.rote_dron.append(t)))
                             self.rote_dron = False
                         return

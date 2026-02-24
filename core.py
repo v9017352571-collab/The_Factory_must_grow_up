@@ -18,9 +18,10 @@ class Core(Building):
         )
 
         # Начальные ресурсы
-        self.storage.add("Медь", 10)
-        self.storage.add("Олово", 5)
-        self.storage.add("Уголь", 5)
+        self.add("Медь", 10)
+        self.add("Олово", 5)
+        self.add("Уголь", 5)
+        print('Я родился')
 
         self.production_time = 1.0
 
