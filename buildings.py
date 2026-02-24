@@ -1,12 +1,9 @@
-# buildings.py
-from __future__ import annotations
 import arcade
-from typing import Dict
+from typing import Dict, Optional, Deque
 from collections import deque
-import math
-
-from constants import *
 from resources import ResourceTransaction, ResourceStorage
+from enemies import Bug
+import math
 from sprite_list import good_bullet, bugs
 # from enemies import Bug
 
@@ -16,18 +13,76 @@ BUILDING_HP = {
     "Дрон-станция": 5,
     "Угольный бур": 5,
     "Электрический бур": 5,
-    "Печь для бронзы": 5,
-    "Кремниевая печь": 5,
+    "Бронзовая плавильня": 5,
+    "Кремнева плавильня": 5,
     "Завод микросхем": 5,
     "Завод боеприпасов": 5,
     "Медная турель": 5,
     "Бронзовая турель": 10,
-    "Дальняя турель": 5
+    "Дальняя турель": 5,
+    "Ядро": 20
 }
+
+RESOURCES_COST = {
+    'Угольный бур': {'медь': 10, 'олово': 6, 'уголь': 0, 'бронза': 0, 'кремний': 0, 'боеприпас': 0},
+    'Электрический бур': {'медь': 20, 'олово': 8, 'уголь': 0, 'бронза': 5, 'кремний': 5, 'боеприпас': 0},
+    'Кремнева плавильня': {'медь': 12, 'олово': 5, 'уголь': 0, 'бронза': 0, 'кремний': 0, 'боеприпас': 0},
+    'Бронзовая плавильня': {'медь': 30, 'олово': 14, 'уголь': 0, 'бронза': 0, 'кремний': 12, 'боеприпас': 0},
+    'Завод боеприпасов': {'медь': 8, 'олово': 15, 'уголь': 0, 'бронза': 0, 'кремний': 24, 'боеприпас': 0},
+    'Медная турель': {'медь': 32, 'олово': 16, 'уголь': 0, 'бронза': 0, 'кремний': 0, 'боеприпас': 0},
+    'Бронзовая турель': {'медь': 14, 'олово': 6, 'уголь': 0, 'бронза': 10, 'кремний': 12, 'боеприпас': 0},
+    'Длинноствольная турель': {'медь': 64, 'олово': 16, 'уголь': 0, 'бронза': 24, 'кремний': 10, 'боеприпас': 12},
+    'Дроны': {'медь': 5, 'олово': 3, 'уголь': 0, 'бронза': 0, 'кремний': 1, 'боеприпас': 0}
+}
+
+RESOURCES_RECIPSES = {
+    'Кремнева плавильня': {'input_resources': ('уголь'), 'output_resources': 'кремний'},
+    'Бронзовая плавильня': {'input_resources': ('уголь', 'медь', 'олово'), 'output_resources': 'бронза'},
+    'Завод боеприпасов': {'input_resources': ('уголь', 'олово', 'кремний'), 'output_resources': 'боеприпас'},
+}
+
+RESOURCES_SHOOTS = {
+    'Медная турель': ('медь', 'уголь'),
+    'Бронзовая турель': ('боеприпас'),
+    'Длинноствольная турель': ('боеприпас', 'бронза')
+}
+
+BUILDINGS_TYPE = {
+    'Угольный бур': 'Бур',
+    'Электрический бур': 'Бур',
+    'Кремнева плавильня': 'Завод',
+    'Бронзовая плавильня': 'Завод',
+    'Завод боеприпасов': 'Завод',
+    'Медная турель': 'Турель',
+    'Бронзовая турель': 'Турель',
+    'Длинноствольная турель': 'Турель'
+}
+
+"""
+Угольный бур - 10 медь, 6 олово, уголь, бронза, кремний, бп (потребляет: уголь, выдает: ресурс на котором стоит)
+
+Электрический бур - 20 медь, 8 олово, уголь, 5 бронза, 5 кремний, бп (потребляет: None, выдает: ресурс на котором стоит)
+
+Кремнева плавильня - 12 медь, 5 олово, уголь, бронза, кремний, бп (потребляет: уголь, выдает: кремний)
+
+Бронзовая плавильня - 30 медь, 14 олово, уголь, бронза, 12 кремний, бп (потребляет: уголь, медь и олово, выдает: бронзу)
+
+Завод боеприпасов - 8 медь, 15 олово, уголь, бронза, 24 кремний, бп (потребляет: уголь, олово и кремний, выдает: бп)
+
+Медная турель - 32 медь,  16 олово, уголь, бронза, кремний, бп (потребляет: медь и уголь, выдает: 1 хп врагу)
+
+Бронзовая турель - 14 медь, 6 олово, уголь, 10 бронза, 12 кремний, бп (потребляет: бп, выдает: 3 хп врагу)
+
+Длинноствольная турель - 64 медь, 16 олово, уголь, 24 бронза, 10 кремний, 12 бп (потребляет: бп и бронзу, выдает: 5 хп врагу)
+
+Дроны - 5 медь, 3 олово, 1 кремний
+
+Ядро - бесценно (потребляет: None, выдает: уголь, медь, олово и кремний(последний с шансом в 10%))
+"""
 
 
 # =========== БАЗОВЫЙ КЛАСС Building ===========
-class Building(arcade.Sprite):
+class Building(arcade.Sprite, ResourceStorage):
     """Базовый класс для всех зданий"""
 
     def __init__(
@@ -37,12 +92,10 @@ class Building(arcade.Sprite):
             x: float,
             y: float,
             name: str,
-            hp: int,
-            cost: ResourceTransaction,
-            storage_capacity: Dict[str, int] = None,
-            size: int = 1
+            capacity: Dict[str, int] | None
     ):
-        super().__init__(image_path, scale)
+        arcade.Sprite.__init__(self, image_path, scale)
+        ResourceStorage.__init__(self, capacity)
 
         # Основные свойства
         self.center_x = x
@@ -50,13 +103,13 @@ class Building(arcade.Sprite):
         self.name = name
 
         # Здоровье
-        self.hp = hp
-        self.max_hp = hp
+        self.max_hp = BUILDING_HP[name]
+        self.hp = self.max_hp
         self.is_destroyed = False
 
         # Ресурсы
-        self.cost = cost
-        self.storage = ResourceStorage(storage_capacity)
+        # self.cost = cost
+        self.cost = ResourceTransaction(RESOURCES_COST[self.name])
 
         # Для производства
         self.production_timer = 0.0
@@ -140,7 +193,7 @@ class Building(arcade.Sprite):
         if not cargo:
             return False
 
-        if self.storage.can_add(cargo, 1) and self.storage.add(cargo, 1):
+        if self.can_add(cargo, 1) and self.add(cargo, 1):
             drone.unload()
             return True
         return False
@@ -154,14 +207,14 @@ class Building(arcade.Sprite):
         needed = drone.get_needed_resource()
         if not needed:
             # Берём первый доступный
-            for res, amt in self.storage.get_all().items():
+            for res, amt in self.get_all().items():
                 if amt > 0:
                     needed = res
                     break
             if not needed:
                 return False
 
-        if self.storage.has(needed, 1) and self.storage.remove(needed, 1):
+        if self.has(needed, 1) and self.remove(needed, 1):
             drone.load(needed)
             return True
         return False
@@ -169,7 +222,7 @@ class Building(arcade.Sprite):
     def _destroy(self):
         """Полное уничтожение здания"""
         self.is_destroyed = True
-        self.storage.clear()
+        self.clear()
 
         # Оповещаем дронов
         for drone in list(self.attached_drones):
@@ -181,16 +234,6 @@ class Building(arcade.Sprite):
         self.waiting_unload.clear()
 
     # === ПУБЛИЧНЫЕ МЕТОДЫ ===
-
-    def can_accept(self, resource: str) -> bool:
-        """Может ли принять ресурс?"""
-        return self.storage.can_add(resource, 1)
-
-    def has_resource(self, resource: str = None) -> bool:
-        """Есть ли ресурс?"""
-        if resource:
-            return self.storage.has(resource, 1)
-        return not self.storage.is_empty()
 
     def attach_drone(self, drone):
         """Привязать дрона"""
@@ -213,7 +256,7 @@ class Building(arcade.Sprite):
         return {
             "name": self.name,
             "hp": f"{self.hp}/{self.max_hp}",
-            "resources": str(self.storage),
+            "resources": str(self.get_all()),
             "production": f"{self.production_timer:.1f}/{self.production_time}s"
             if self.production_time > 0 else "Нет"
         }
@@ -232,7 +275,6 @@ class MineDrill(Building):
             x: float, y: float,
             drill_type: str,
             resource_type: str,
-            cost: ResourceTransaction,
             name: str,
             needs_coal: bool = False
     ):
@@ -246,10 +288,7 @@ class MineDrill(Building):
             scale=scale,
             x=x, y=y,
             name=name,
-            hp=BUILDING_HP.get(name, 5),
-            cost=cost,
-            storage_capacity=capacity,
-            size=1
+            capacity=capacity,
         )
 
         self.drill_type = drill_type
@@ -266,27 +305,25 @@ class MineDrill(Building):
         """Добывает ресурс"""
         if self.needs_coal:
             # Проверяем есть ли уголь
-            if not self.storage.has("Уголь", 1):
+            if not self.has("Уголь", 1):
                 return
             # Тратим уголь
-            self.storage.remove("Уголь", 1)
+            self.remove("Уголь", 1)
 
         # Добываем ресурс
-        self.storage.add(self.resource_type, 1)
+        self.add(self.resource_type, 1)
 
 
 class CoalDrill(MineDrill):
     """Угольный бур - медленный, требует уголь"""
 
     def __init__(self, x: float, y: float, resource_type: str = "Медь"):
-        cost = ResourceTransaction({"Медь": 2})
         super().__init__(
             image_path="Изображения/Здания/Буры/Бур.png",
             scale=0.25,
             x=x, y=y,
             drill_type="угольный",
             resource_type=resource_type,
-            cost=cost,
             name="Угольный бур",
             needs_coal=True
         )
@@ -296,19 +333,15 @@ class ElectricDrill(MineDrill):
     """Электрический бур - быстрый, не требует топлива"""
 
     def __init__(self, x: float, y: float, resource_type: str = "Медь"):
-        cost = ResourceTransaction({"Медь": 3, "Железо": 1})
         super().__init__(
             image_path="Изображения/Здания/Буры/Бур.png",
             scale=0.25,
             x=x, y=y,
             drill_type="электрический",
             resource_type=resource_type,
-            cost=cost,
             name="Электрический бур",
             needs_coal=False
         )
-        self.hp = BUILDING_HP["Электрический бур"]
-        self.max_hp = self.hp
 
 
 # ----------- ПРОИЗВОДСТВЕННЫЕ ЗДАНИЯ -----------
@@ -320,66 +353,54 @@ class ProductionBuilding(Building):
             image_path: str,
             scale: float,
             x: float, y: float,
-            size: int,
-            recipe: Dict[str, int],  # Что нужно {"Медь": 1, "Олово": 1}
-            output: str,  # Что получается "Бронза"
             production_time: float,
-            cost: ResourceTransaction,
             name: str
     ):
-        # Вместимость = входные ресурсы + выход
-        capacity = recipe.copy()
-        capacity[output] = 10  # Может хранить 10 выходного ресурса
+
+        self.input = RESOURCES_RECIPSES[name]['input_resources']
+        self.output = RESOURCES_RECIPSES[name]['output_resources']
+        capacity = {key: 10 for key in self.input}
+        capacity[self.output] = 5
 
         super().__init__(
             image_path=image_path,
             scale=scale,
             x=x, y=y,
             name=name,
-            hp=BUILDING_HP.get(name, 5),
-            cost=cost,
-            storage_capacity=capacity,
-            size=size
+            capacity=capacity
         )
 
-        self.recipe = recipe
-        self.output = output
         self.production_time = production_time
 
     def _produce(self):
         """Производит выходной ресурс"""
         # 1. Проверяем все ли ингредиенты есть
-        for ingredient, amount in self.recipe.items():
-            if not self.storage.has(ingredient, amount):
+        for ingredient in self.input:
+            if not self.has(ingredient, 1):
                 return  # Не хватает чего-то
 
         # 2. Проверяем есть ли место для продукта
-        if not self.storage.can_add(self.output, 1):
+        if not self.can_add(self.output, 1):
             return  # Нет места
 
         # 3. Забираем ингредиенты
-        for ingredient, amount in self.recipe.items():
-            self.storage.remove(ingredient, amount)
+        for ingredient in self.input:
+            self.remove(ingredient, 1)
 
         # 4. Добавляем продукт
-        self.storage.add(self.output, 1)
+        self.add(self.output, 1)
 
 
 class BronzeFurnace(ProductionBuilding):
     """Печь для бронзы"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 3, "Олово": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Печь.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
-            recipe={"Медь": 1, "Олово": 1, "Уголь": 1},
-            output="Бронза",
             production_time=2.0,
-            cost=cost,
-            name="Печь для бронзы"
+            name="Бронзовая плавильня"
         )
         self.hp = BUILDING_HP["Печь для бронзы"]
         self.max_hp = self.hp
@@ -389,17 +410,12 @@ class SiliconFurnace(ProductionBuilding):
     """Кремниевая печь"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 2, "Песок": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Печь.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
-            recipe={"Песок": 1, "Уголь": 1},
-            output="Кремний",
             production_time=2.0,
-            cost=cost,
-            name="Кремниевая печь"
+            name="Кремнева плавильня"
         )
         self.hp = BUILDING_HP["Кремниевая печь"]
         self.max_hp = self.hp
@@ -409,20 +425,13 @@ class AmmoFactory(ProductionBuilding):
     """Завод боеприпасов"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 2, "Олово": 1})
         super().__init__(
             image_path="Изображения/Здания/Заводы/Завод.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
-            recipe={"Олово": 1, "Уголь": 1},
-            output="Боеприпасы",
             production_time=1.0,
-            cost=cost,
             name="Завод боеприпасов"
         )
-        self.hp = BUILDING_HP["Завод боеприпасов"]
-        self.max_hp = self.hp
 
 
 # ----------- ТУРЕЛИ -----------
@@ -435,29 +444,21 @@ class Turret(Building):
             tower_image: str,
             scale: float,
             x: float, y: float,
-            size: int,
             damage: int,
             attack_range: float,  # в пикселях
             bullet_lifetime: float,
             bullet_speed: float,
             cooldown: float,
-            ammo_type: str,  # Тип боеприпасов
             ammo_per_shot: int,  # Сколько тратит за выстрел
-            cost: ResourceTransaction,
             name: str
     ):
-        # Турель хранит только боеприпасы
-        capacity = {ammo_type: 50}  # До 50 патронов
-
+        capacity = {key: 10 for key in RESOURCES_SHOOTS[self.name]}
         super().__init__(
             image_path=base_image,
             scale=scale,
             x=x, y=y,
             name=name,
-            hp=BUILDING_HP.get(name, 5),
-            cost=cost,
-            storage_capacity=capacity,
-            size=size
+            capacity=capacity
         )
 
         # Дополнительные спрайты
@@ -477,13 +478,13 @@ class Turret(Building):
         self.bullet_speed = bullet_speed
         self.cooldown_time = cooldown
         self.current_cooldown = 0.0
-        self.ammo_type = ammo_type
         self.ammo_per_shot = ammo_per_shot
+        self.resources_for_shoot = {key: 1 for key in RESOURCES_SHOOTS[self.name]}
 
         # Для поиска цели
         self.target = None
+        self.velocity = (0, 0)
 
-        # self.bullets = arcade.SpriteList()  # Пули этой турели
 
     def update(self, delta_time: float):
         """Переопределяем для стрельбы"""
@@ -500,7 +501,7 @@ class Turret(Building):
         # self.bullets.update() # update в игре через единый список для всех пуль
 
         # Если перезарядились и есть патроны - ищем цель
-        if self.current_cooldown <= 0 and self.storage.has(self.ammo_type, self.ammo_per_shot):
+        if self.current_cooldown <= 0 and self.has(self.ammo_type, self.ammo_per_shot):
             if self._find_target():
                 self._shoot()
 
@@ -524,12 +525,16 @@ class Turret(Building):
     def _shoot(self):
         """Производит выстрел"""
         # Тратим патроны
-        if not self.storage.remove(self.ammo_type, self.ammo_per_shot):
+        if not self.remove_all(self.resources_for_shoot):
             return
 
         self.current_cooldown = self.cooldown_time
 
-        good_bullet.append(Shot_Bullet(self, target=self.target))
+        self.set_velocity()
+        self.calculate_angle()
+        #TODO: make a rotate tower
+
+        good_bullet.append(ShotBullet(self, target=self.target, velocity=self.velocity))
 
     def set_enemies(self, enemies_list = bugs):
         """для поиска цели"""
@@ -541,89 +546,81 @@ class Turret(Building):
     def calculate_range(self, x, y) -> float:
         return (x ** 2 + y ** 2) / self.radius ** 2
 
+    def set_velocity(self):
+        """устанавливает вектор движения пули"""
+        x_t, y_t = self.target.get_coords()
+        x, y = x_t - self.source.center, y_t - self.source.center_y
+        s = math.sqrt(x**2 + y**2)
+        self.velocity = (x / s, y / s)
+
+    def calculate_angle(self):
+        x, y = self.velocity
+        if x < 0 and y < 0: self.tower_angle = math.asin(self.velocity[1]) * 180 / math.pi - 180
+        elif x < 0 and y > 0: self.tower_angle = math.acos(self.velocity[0]) * 180 / math.pi
+        elif x > 0 and y < 0: self.tower_angle = math.asin(self.velocity[1]) * 180 / math.pi
+        elif x > 0 and y > 0: self.tower_angle = math.acos(self.velocity[0]) * 180 / math.pi
+
 
 class CopperTurret(Turret):
     """Медная турель"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
             damage=1,
             attack_range=200,
             bullet_lifetime=3.0,
             bullet_speed=75.0,
             cooldown=1.0,
-            ammo_type="Медь",
             ammo_per_shot=1,
-            cost=cost,
             name="Медная турель"
         )
-        self.hp = BUILDING_HP["Медная турель"]
-        self.max_hp = self.hp
 
 
 class BronzeTurret(Turret):
     """Бронзовая турель"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 3, "Бронза": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
             damage=2,
             attack_range=250,
             bullet_lifetime=3.5,
             bullet_speed=87.5,
             cooldown=0.7,
-            ammo_type="Боеприпасы",
             ammo_per_shot=1,
-            cost=cost,
             name="Бронзовая турель"
         )
-        self.hp = BUILDING_HP["Бронзовая турель"]
-        self.max_hp = self.hp
 
 
 class LongRangeTurret(Turret):
     """Дальняя турель"""
 
     def __init__(self, x: float, y: float):
-        cost = ResourceTransaction({"Медь": 4, "Бронза": 3, "Микросхема": 2})
         super().__init__(
             base_image="Изображения/Здания/Турели/РГ турель основание.png",
             tower_image="Изображения/Здания/Турели/РГ турель башня.png",
             scale=0.25,
             x=x, y=y,
-            size=2,
             damage=6,
             attack_range=400,
             bullet_lifetime=4.0,
             bullet_speed=100.0,
             cooldown=2.0,
-            ammo_type="Боеприпасы",
             ammo_per_shot=1,
-            cost=cost,
-            name="Дальняя турель"
+            name="Длинноствольная турель"
         )
-        # Дальняя турель требует и микросхемы тоже
-        # self.storage.capacity["Микросхема"] = 20
-        # self.storage.resources["Микросхема"] = 0
-
-        self.hp = BUILDING_HP["Дальняя турель"]
-        self.max_hp = self.hp
 
 
-class Shot_Bullet(arcade.Sprite):
+class ShotBullet(arcade.Sprite):
     """временный класс для выстрелов"""
-    def __init__(self, source: 'Turret', target: 'Bug'):
+    def __init__(self, source: 'Turret', target: 'Bug', velocity: tuple):
         super().__init__('Изображения/Остальное/Пуля.png', 0.05)
         self.center_x = source.center_x
         self.center_y = source.center_y
@@ -632,14 +629,8 @@ class Shot_Bullet(arcade.Sprite):
         self.bullet_speed = source.bullet_speed
         self.attack_range = source.attack_range
         self.target = target
-        self.velocity = (0.0, 0.0)
-        self.set_velocity()
+        self.velocity = velocity
 
-    def set_velocity(self):
-        """устанавливает вектор движения пули"""
-        x, y = self.target.center_x - self.source.center, self.target.center_y - self.source.center_y
-        s = x + y
-        self.velocity = (x / s, y / s)
 
     def update(self, delta_time: float):
         """двигаем пулю к цели"""
@@ -649,5 +640,4 @@ class Shot_Bullet(arcade.Sprite):
 
         self.center_x += int(self.velocity[0] * delta_time)
         self.center_y += int(self.velocity[1] * delta_time)
-
 

@@ -74,12 +74,21 @@ class ResourceStorage:
         """Есть ли ресурс в нужном количестве?"""
         return self.resources.get(resource, 0) >= amount
 
+    def has_all(self, resources: dict) -> bool:
+        """есть ли все ресурсы в нужном количестве?"""
+        return all(self.has(key, value) for key, value in resources.items())
+
     def remove(self, resource: str, amount: int = 1) -> bool:
         """Забрать ресурс"""
         if not self.has(resource, amount):
             return False
         self.resources[resource] -= amount
         return True
+
+    def remove_all(self, resources: dict):
+        """забирает все ресурсы из словаря"""
+        for resource, amount in resources.items():
+            self.remove(resource, amount)
 
     def get_amount(self, resource: str) -> int:
         """Сколько есть ресурса?"""
