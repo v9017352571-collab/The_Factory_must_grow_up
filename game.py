@@ -65,67 +65,108 @@ class MyGame(arcade.Window):
         self.star_texture = arcade.load_texture("Изображения\Остальное\Пуля.png")
         self.orb_texture = arcade.load_texture("Изображения\Остальное\Камень.png")
         self.pausa_dui()
+        self.game_time = 0.0  # время текущего уровня
+        self.game_stats = GameStats()  # общая статистика за все уровни
+        self.current_level = 1  # будет переопределено из меню
+        self.current_user_id = None  # ID пользователя из БД
+        self.current_user = None  # имя пользователя
+        self.enemies_killed = 0  # убито на текущем уровне
+        self.buildings_built = 0  # построено на уровне
+        self.drones_used = 0  # создано дронов на уровне
 
+    def calculate_level_stats(self):
+        # Пока score и resources_collected можно оставить заглушками
+        return {
+            'level_number': self.current_level,
+            'score': 0,  # можно добавить позже
+            'enemies_killed': self.enemies_killed,
+            'time_spent': self.game_time,
+            'waves_completed': self.current_wave_index,
+            'resources_collected': 0,  # заглушка
+            'buildings_built': self.buildings_built,
+            'drones_used': self.drones_used
+        }
 
+    def victory(self):
+        level_stats = self.calculate_level_stats()
+        self.game_stats.add_level_result(level_stats)
 
-    # def calculate_level_stats(self):
-    #     """Вычисление статистики для текущего уровня"""
-    #     return {
-    #         'level_number': self.current_level,
-    #         'score': self.calculate_score(),
-    #         'enemies_killed': self.enemies_killed,
-    #         'time_spent': self.game_time,
-    #         'waves_completed': self.current_wave_index,
-    #         'resources_collected': self.calculate_resources_collected(),
-    #         'buildings_built': len(self.buildings),
-    #         'drones_used': len(self.drones)
-    #     }
-    #
-    # def on_victory(self):
-    #     """Вызывается при победе на уровне"""
-    #     level_stats = self.calculate_level_stats()
-    #
-    #     # Сохраняем в общую статистику
-    #     self.game_stats.add_level_result(level_stats)
-    #
-    #     # Показываем соответствующее окно
-    #     from menu import show_level_complete, show_final_results
-    #
-    #     total_levels = 5  # Всего уровней в игре
-    #
-    #     if self.current_level < total_levels:
-    #         # Показываем окно завершения уровня
-    #         show_level_complete(
-    #             level_data=level_stats,
-    #             user_id=self.current_user_id,
-    #             username=self.current_user
-    #         )
-    #     else:
-    #         # Показываем финальное окно
-    #         total_stats = self.game_stats.get_total_stats()
-    #         show_final_results(
-    #             total_stats=total_stats,
-    #             user_id=self.current_user_id,
-    #             username=self.current_user
-    #         )
-    #
-    # def on_defeat(self, reason: str = "Ядро разрушено"):
-    #     """Вызывается при поражении"""
-    #     from menu import show_game_over
-    #
-    #     stats = {
-    #         'score': self.calculate_score(),
-    #         'enemies_killed': self.enemies_killed,
-    #         'time_survived': self.game_time,
-    #         'waves_completed': self.current_wave_index
-    #     }
-    #
-    #     show_game_over(
-    #         level_number=self.current_level,
-    #         reason=reason,
-    #         stats=stats,
-    #         user_id=self.current_user_id
-    #     )
+        # Сохраняем прогресс в БД (если есть пользователь)
+        if self.current_user_id:
+            from database import GameDatabase
+            with GameDatabase() as db:
+                db.save_level_record(self.current_user_id, level_stats)
+                db.update_player_progress(self.current_user_id, self.current_level)
+
+        # Проверяем, все ли уровни пройдены (всего 3)
+        if self.current_level < 3:
+            from menu import LevelCompleteWindow
+            win = LevelCompleteWindow(
+                level_data=level_stats,
+                user_id=self.current_user_id,
+                username=self.current_user,
+                callback=self.handle_level_complete
+            )
+            win.show()
+        else:
+            from menu import FinalResultsWindow
+            win = FinalResultsWindow(
+                total_stats=self.game_stats.get_total_stats(),
+                user_id=self.current_user_id,
+                username=self.current_user,
+                callback=self.handle_game_complete
+            )
+            win.show()
+        self.close()
+
+    def defeat(self, reason="Ядро разрушено"):
+        from menu import GameOverWindow
+        win = GameOverWindow(
+            level_number=self.current_level,
+            reason=reason,
+            stats={
+                'score': 0,
+                'enemies_killed': self.enemies_killed,
+                'time_survived': self.game_time,
+                'waves_completed': self.current_wave_index
+            },
+            user_id=self.current_user_id,
+            callback=self.handle_game_over
+        )
+        win.show()
+        self.close()
+
+    def handle_level_complete(self, action):
+        if action == 'next_level':
+            self.start_new_level(self.current_level + 1)
+        elif action == 'retry_level':
+            self.start_new_level(self.current_level)
+        elif action == 'to_menu':
+            from menu import StartMenuWindow
+            StartMenuWindow(self.width, self.height, "Заводы и Тауэр Дефенс").show()
+
+    def handle_game_over(self, action):
+        if action == 'retry_level':
+            self.start_new_level(self.current_level)
+        elif action == 'to_menu':
+            from menu import StartMenuWindow
+            StartMenuWindow(self.width, self.height, "Заводы и Тауэр Дефенс").show()
+
+    def handle_game_complete(self, action):
+        if action == 'new_game':
+            self.start_new_level(1)
+        elif action == 'to_menu':
+            from menu import StartMenuWindow
+            StartMenuWindow(self.width, self.height, "Заводы и Тауэр Дефенс").show()
+
+    def start_new_level(self, level):
+        from game import MyGame
+        game = MyGame(self.width, self.height, f"Уровень {level}")
+        game.current_level = level
+        game.current_user_id = self.current_user_id
+        game.current_user = self.current_user
+        game.setup()
+        arcade.run()
 
     def load_map(self):
         """
@@ -248,6 +289,7 @@ class MyGame(arcade.Window):
         - Система ресурсов: управляет производством и передачей ресурсов
         """
         if self.game_state == 'game':
+            self.game_time += delta_time
             self.cam()
                 # Обновление игрока
             if players:
@@ -327,6 +369,7 @@ class MyGame(arcade.Window):
                     for i in hit_list:
                         self.create_explosion(b.center_x, b.center_y)
                         i.take_damage(b.damage)
+                        self.enemies_killed += 1
                         good_bullet.remove(b)
                         arcade.play_sound(random.choice(HIT))
 
@@ -585,6 +628,7 @@ class MyGame(arcade.Window):
                     return
             if building:
                 buildings.append(building(x3, y3))
+                self.buildings_built += 1
                 return
 
             # Снос зданий
@@ -611,6 +655,7 @@ class MyGame(arcade.Window):
                 if self.rote_dron and t.center_x == x3 and t.center_y == y3:
                     if self.rote_dron != True:
                         players.append(Drone(self.rote_dron.append(t)))
+                        self.drones_used += 1
                         self.rote_dron = False
                         self.core.add_resource("Кремний", -3)
                         self.core.add_resource("Медь", -2)
@@ -666,13 +711,10 @@ class MyGame(arcade.Window):
             self.pressed_keys.remove(key)
 
     def check_game_state(self):
-        """
-        Проверка состояния игры
-        """
         if self.core.hp <= 0:
-            self.game_state = "game_over"
+            self.defeat("Ядро разрушено")
         elif self.current_wave_index >= len(self.waves) and len(bugs) == 0:
-            self.game_state = "victory"
+            self.victory()
         elif arcade.key.ESCAPE in self.pressed_keys:
             self.game_state = "pause"
         else:
@@ -726,29 +768,31 @@ if __name__ == "__main__":
 
 
 class GameStats:
-    """Класс для хранения и обработки статистики игры"""
-
     def __init__(self):
         self.level_results = []
         self.total_score = 0
         self.total_enemies_killed = 0
         self.total_play_time = 0.0
         self.levels_completed = 0
+        self.total_buildings = 0      # новое
+        self.total_drones = 0         # новое
 
     def add_level_result(self, level_stats):
-        """Добавляет результат уровня"""
         self.level_results.append(level_stats)
         self.total_score += level_stats.get('score', 0)
         self.total_enemies_killed += level_stats.get('enemies_killed', 0)
         self.total_play_time += level_stats.get('time_spent', 0)
         self.levels_completed += 1
+        self.total_buildings += level_stats.get('buildings_built', 0)
+        self.total_drones += level_stats.get('drones_used', 0)
 
     def get_total_stats(self):
-        """Возвращает общую статистику"""
         return {
             'total_score': self.total_score,
             'total_enemies_killed': self.total_enemies_killed,
             'total_play_time': self.total_play_time,
             'levels_completed': self.levels_completed,
+            'total_buildings': self.total_buildings,
+            'total_drones': self.total_drones,
             'level_results': self.level_results
         }
